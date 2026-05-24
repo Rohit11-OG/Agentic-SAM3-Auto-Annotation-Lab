@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.egg-info/
+models/
+data/annotations_final/
+data/annotations_raw/
+*.log
