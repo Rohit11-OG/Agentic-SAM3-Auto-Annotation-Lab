@@ -53,6 +53,24 @@ STOPWORDS = {
     # context nouns (not classes)
     "image", "images", "photo", "photos", "picture", "pictures", "scene", "scenes",
     "frame", "frames", "background", "foreground",
+    # additional fillers / verbs
+    "there", "here", "so", "just", "only", "want", "wants", "like", "choose", 
+    "select", "target", "need", "needs", "go", "give", "make", "get", "put", 
+    "anootate", "annotated"
+}
+
+MODIFIERS = {
+    # colors
+    "silver", "gray", "grey", "black", "white", "red", "green", "blue", "yellow", 
+    "orange", "brown", "pink", "purple", "gold", "metallic", "color", "colour", 
+    "colored", "coloured", "colors", "colours", "shade", "tone",
+    # materials
+    "metal", "plastic", "wooden", "wood", "glass", "steel", "iron", "copper", 
+    "leather", "paper", "cardboard", "fabric", "cloth",
+    # sizes / shapes / relative positions
+    "large", "small", "big", "tiny", "medium", "tall", "short", "wide", "narrow", 
+    "long", "round", "square", "rectangular", "flat", "top", "bottom", "left", 
+    "right", "side", "middle", "front", "back",
 }
 
 
@@ -86,70 +104,148 @@ def _canonical_for(token: str) -> Optional[str]:
     return None
 
 
+def _simple_singularize(tok: str) -> str:
+    if len(tok) > 4 and tok.endswith("es"):
+        if tok.endswith(("sses", "shes", "ches", "xes", "zes")):
+            return tok[:-2]
+        return tok[:-1]
+    if len(tok) > 3 and tok.endswith("s") and not tok.endswith("ss"):
+        return tok[:-1]
+    return tok
+
+
 def interpret_prompt(user_prompt: str, fallback_schema: Optional[List[str]] = None) -> PromptPlan:
     raw = user_prompt.strip()
-    text = raw.lower()
 
-    text = re.sub(r"[^a-z0-9\s,_-]", " ", text)
-    parts = re.split(r"[,\s]+", text)
-    _stopwords_list = list(STOPWORDS)
-    tokens: List[str] = []
-    for p in parts:
-        if not p or p in STOPWORDS:
-            continue
-        # Skip fuzzy stopword check if token is a known class or its plural
-        if _canonical_for(p) is not None:
-            tokens.append(p)
-            continue
-        # Drop likely typos of stopwords
-        if len(p) >= 5 and get_close_matches(p, _stopwords_list, n=1, cutoff=0.85):
-            continue
-        tokens.append(p)
+    # 1. Check for quoted substrings first to find explicit class targets
+    explicit_quoted = re.findall(r'"([^"]+)"', raw) or re.findall(r"'([^']+)'", raw)
+    explicit_quoted = [q.strip().lower() for q in explicit_quoted if q.strip()]
+
+    # 2. Split prompt by coordinate conjunctions and commas
+    phrases = re.split(r"\band\b|\bor\b|,", raw, flags=re.IGNORECASE)
 
     classes: List[str] = []
+    per_class_prompt: Dict[str, str] = {}
     seen = set()
-    i = 0
-    while i < len(tokens):
-        # try bigram first ("traffic light", "stop sign")
-        if i + 1 < len(tokens):
-            bigram = f"{tokens[i]} {tokens[i+1]}"
-            canon = _canonical_for(bigram)
-            if canon:
-                if canon not in seen:
-                    classes.append(canon)
-                    seen.add(canon)
-                i += 2
-                continue
-        canon = _canonical_for(tokens[i])
-        if canon and canon not in seen:
-            classes.append(canon)
-            seen.add(canon)
-        i += 1
-
     notes: List[str] = []
-    if not classes:
-        # Fallback A: treat remaining content tokens as raw class names
-        raw_classes: List[str] = []
+    _stopwords_list = list(STOPWORDS)
+
+    for phrase in phrases:
+        phrase_str = phrase.strip().lower()
+        if not phrase_str:
+            continue
+
+        # Clean phrase and get tokens
+        clean_phrase_str = re.sub(r"[^a-z0-9\s-]", " ", phrase_str)
+        parts = clean_phrase_str.split()
+
+        # Filter tokens (similar to the original list compilation with typo detection)
+        tokens = []
+        for p in parts:
+            if not p or p in STOPWORDS:
+                continue
+            if _canonical_for(p) is not None:
+                tokens.append(p)
+                continue
+            if len(p) >= 5 and get_close_matches(p, _stopwords_list, n=1, cutoff=0.85):
+                continue
+            tokens.append(p)
+
+        if not tokens:
+            continue
+
+        # Singularize non-canonical custom tokens to match expected behavior
+        cleaned_tokens = []
         for tok in tokens:
-            tok_clean = re.sub(r"s$", "", tok) if len(tok) > 3 and tok.endswith("s") else tok
-            if tok_clean and tok_clean not in seen and len(tok_clean) >= 3:
-                raw_classes.append(tok_clean)
-                seen.add(tok_clean)
-        if raw_classes:
-            classes = raw_classes
-            notes.append(f"Unknown classes; using raw tokens as SAM3 prompts: {raw_classes}")
-        elif fallback_schema:
+            if _canonical_for(tok) is not None:
+                cleaned_tokens.append(tok)
+            else:
+                cleaned_tokens.append(_simple_singularize(tok))
+        tokens = cleaned_tokens
+
+        # Check if the phrase contains any of the explicitly quoted words
+        quoted_match = None
+        for q in explicit_quoted:
+            q_clean = _simple_singularize(q)
+            if q_clean in tokens or q_clean in clean_phrase_str:
+                quoted_match = q_clean
+                break
+
+        # Check for bigrams (like "traffic light") in canonical mapping
+        bigram_match = None
+        bigram_tokens = set()
+        i = 0
+        while i < len(tokens) - 1:
+            bigram = f"{tokens[i]} {tokens[i+1]}"
+            canon_bigram = _canonical_for(bigram)
+            if canon_bigram:
+                bigram_match = canon_bigram
+                bigram_tokens = {tokens[i], tokens[i+1]}
+                break
+            i += 1
+
+        # Determine target token and canonical name
+        if bigram_match:
+            class_name = bigram_match
+            base_term = bigram_match
+            target_token = None
+        else:
+            if quoted_match:
+                target_token = quoted_match
+            else:
+                # Backtrack to find the first non-modifier token from the end, if possible
+                target_token = None
+                for t in reversed(tokens):
+                    if t not in MODIFIERS:
+                        target_token = t
+                        break
+                # If all tokens are modifiers, default to the last token
+                if not target_token:
+                    target_token = tokens[-1]
+
+            canon = _canonical_for(target_token)
+            class_name = canon if canon else target_token
+            base_term = canon if canon else target_token
+
+        # Deduplicate
+        if class_name in seen:
+            continue
+        seen.add(class_name)
+        classes.append(class_name)
+
+        # Build prompt: keep modifier tokens in phrase
+        adjectives = []
+        for t in tokens:
+            if t in bigram_tokens:
+                continue
+            t_canon = _canonical_for(t) or t
+            t_clean = re.sub(r"s$", "", t) if len(t) > 3 and t.endswith("s") else t
+            if (t_canon == class_name or 
+                t_clean == class_name or 
+                t == class_name or 
+                (target_token is not None and t == target_token) or 
+                t == base_term):
+                continue
+            adjectives.append(t)
+
+        if adjectives:
+            prompt_text = " ".join(adjectives) + " " + base_term
+        else:
+            prompt_text = base_term
+
+        per_class_prompt[class_name] = prompt_text
+
+    if not classes:
+        if fallback_schema:
             classes = list(fallback_schema)
+            per_class_prompt = {cls: cls for cls in classes}
             notes.append("No classes recognized; using config label_schema.")
         else:
             notes.append("No classes recognized and no fallback provided.")
 
-    # SAM3 text prompts prefer a single concept word, not a comma-joined list.
-    per_class: Dict[str, str] = {cls: cls for cls in classes}
-
     return PromptPlan(
         classes=classes,
-        per_class_prompt=per_class,
+        per_class_prompt=per_class_prompt,
         raw_input=raw,
         notes=notes,
     )
