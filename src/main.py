@@ -75,8 +75,12 @@ def _apply_prompt(config, args: argparse.Namespace) -> None:
         config.label_schema = plan.classes
     config.per_class_prompt = plan.per_class_prompt
 
+    import json
     log = logging.getLogger(__name__)
-    log.info("Interpreted prompt: classes=%s", plan.classes)
+    log.info("Class Label: %s", json.dumps(plan.classes))
+    for cls in plan.classes:
+        prompt_text = plan.per_class_prompt.get(cls, cls)
+        log.info("SAM3 Text Prompt: \"%s\"", prompt_text)
     for note in plan.notes:
         log.info("  note: %s", note)
 
