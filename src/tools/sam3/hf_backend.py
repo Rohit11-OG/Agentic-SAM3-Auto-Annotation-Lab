@@ -16,6 +16,10 @@ LOGGER = logging.getLogger(__name__)
 _MODEL_LOCK = threading.Lock()
 _CACHE: Dict[str, Tuple[Any, Any, str, Any]] = {}  # repo -> (model, processor, device_str, dtype)
 
+_IMG_LOCK = threading.Lock()
+_LAST_IMG: Dict[str, Any] = {}  # path -> PIL.Image (decoded RGB), keep only most recent
+_LAST_IMG_PATH: List[str] = []  # FIFO of paths cached; cap at 2
+
 
 @dataclass
 class _Detection:
@@ -165,7 +169,20 @@ def segment_text_prompt(
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError("PIL/torch required") from exc
 
-    image = Image.open(image_path).convert("RGB")
+    # Cache decoded image across rapid same-path calls (e.g. SAM3Agent looping classes)
+    key = str(image_path)
+    with _IMG_LOCK:
+        cached = _LAST_IMG.get(key)
+    if cached is not None:
+        image = cached
+    else:
+        image = Image.open(image_path).convert("RGB")
+        with _IMG_LOCK:
+            _LAST_IMG[key] = image
+            _LAST_IMG_PATH.append(key)
+            while len(_LAST_IMG_PATH) > 2:
+                old = _LAST_IMG_PATH.pop(0)
+                _LAST_IMG.pop(old, None)
     image_size = image.size  # (W, H)
     threshold = float(params.get("hf_score_threshold", 0.4))
 
