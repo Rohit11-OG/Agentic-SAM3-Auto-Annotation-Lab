@@ -302,3 +302,43 @@ def sam3_segment_exemplar_prompt(
         )
 
     return _mock_exemplar_prompt(exemplar_bbox, params)
+
+
+def sam3_segment_box_prompt(
+    image_path: Path,
+    box: Tuple[int, int, int, int],
+    class_name: str,
+    model_name: str,
+    params: Dict[str, Any],
+) -> List[RawMask]:
+    """User-drawn box → SAM3 mask. hf_local only; falls back to mock if disabled."""
+    backend = str(params.get("backend", "mock")).lower()
+    if backend == "hf_local":
+        try:
+            from src.tools.sam3.hf_backend import segment_box_prompt as _hf_box
+
+            dets = _hf_box(image_path, box, class_name, model_name, params)
+            return [
+                RawMask(polygon=d.polygon, bbox=d.bbox, area=d.area, confidence=d.confidence)
+                for d in dets
+            ]
+        except Exception as exc:  # noqa: BLE001
+            if not params.get("allow_mock_fallback", True):
+                raise
+            warnings.warn(
+                f"SAM3 box-prompt failed; falling back to mock. Reason: {exc}",
+                stacklevel=2,
+            )
+    # Mock: just return the input box as the mask
+    x1, y1, x2, y2 = box
+    x1, x2 = sorted([int(x1), int(x2)])
+    y1, y2 = sorted([int(y1), int(y2)])
+    w, h = max(1, x2 - x1), max(1, y2 - y1)
+    return [
+        RawMask(
+            polygon=[(x1, y1), (x2, y1), (x2, y2), (x1, y2)],
+            bbox=(x1, y1, w, h),
+            area=float(w * h),
+            confidence=0.5,
+        )
+    ]
