@@ -713,6 +713,15 @@ class AnnotatorGUI:
             else:
                 # Fallback to config schema if empty
                 config.user_prompt = "Default config schema"
+                if prompts_raw:
+                    import re
+                    manual_prompts = [p.strip() for p in re.split(r",", prompts_raw) if p.strip()]
+                    config.per_class_prompt = {}
+                    for i, cls in enumerate(config.label_schema):
+                        if i < len(manual_prompts):
+                            config.per_class_prompt[cls] = manual_prompts[i]
+                        else:
+                            config.per_class_prompt[cls] = cls
 
             import json
             self.log_queue.put(("INFO", "SYSTEM", f"Class Label: {json.dumps(config.label_schema)}"))
@@ -1149,12 +1158,13 @@ class AnnotatorGUI:
                 config = load_project_config(resolve_path(cfg_path))
             except Exception:
                 from src.core.models import ProjectConfig
+                yolo_seg_exists = (out_dir / "yolo_seg_labels").exists()
                 config = ProjectConfig(
                     project_name="sam3_auto_annotation_lab",
                     dataset_path=dataset_dir,
                     output_path=out_dir,
                     label_schema=self._classes or ["box"],
-                    yolo_segmentation=True
+                    yolo_segmentation=yolo_seg_exists
                 )
             if log_label_schema:
                 config.label_schema = log_label_schema
@@ -1223,9 +1233,10 @@ class AnnotatorGUI:
                 messagebox.showerror("Error updating logs", f"Could not save changes to logs: {exc}")
                 return
 
-            # quiet YOLO export to keep output directory in sync
+            # quiet YOLO and LabelMe export to keep output directory in sync
             try:
                 from src.tools.yolo.exporter import export_yolo
+                from src.tools.labelme import export_labelme
                 label_schema = self._classes
                 if self.last_config:
                     label_schema = self.last_config.label_schema
@@ -1235,6 +1246,11 @@ class AnnotatorGUI:
                     self.last_output_path,
                     label_schema=label_schema,
                     segmentation=self.last_config.yolo_segmentation if self.last_config else True,
+                    force_all=True,
+                )
+                export_labelme(
+                    self.last_bundles,
+                    self.last_output_path,
                     force_all=True,
                 )
             except Exception as exc:
@@ -1296,9 +1312,10 @@ class AnnotatorGUI:
                 messagebox.showerror("Error updating logs", f"Could not save changes to logs: {exc}")
                 return
 
-            # quiet YOLO export to keep output directory in sync
+            # quiet YOLO and LabelMe export to keep output directory in sync
             try:
                 from src.tools.yolo.exporter import export_yolo
+                from src.tools.labelme import export_labelme
                 label_schema = self._classes
                 if self.last_config:
                     label_schema = self.last_config.label_schema
@@ -1308,6 +1325,11 @@ class AnnotatorGUI:
                     self.last_output_path,
                     label_schema=label_schema,
                     segmentation=self.last_config.yolo_segmentation if self.last_config else True,
+                    force_all=True,
+                )
+                export_labelme(
+                    self.last_bundles,
+                    self.last_output_path,
                     force_all=True,
                 )
             except Exception as exc:
@@ -1379,11 +1401,17 @@ class AnnotatorGUI:
 
         try:
             from src.tools.yolo.exporter import export_yolo
+            from src.tools.labelme import export_labelme
             labels_dir = export_yolo(
                 bundles,
                 out_dir,
                 label_schema=config.label_schema,
                 segmentation=config.yolo_segmentation,
+                force_all=True,
+            )
+            export_labelme(
+                bundles,
+                out_dir,
                 force_all=True,
             )
             self.last_output_path = out_dir

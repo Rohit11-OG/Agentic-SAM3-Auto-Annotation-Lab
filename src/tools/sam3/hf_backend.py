@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 LOGGER = logging.getLogger(__name__)
 
 _MODEL_LOCK = threading.Lock()
+_INFERENCE_LOCK = threading.Lock()
 _CACHE: Dict[str, Tuple[Any, Any, str, Any]] = {}  # repo -> (model, processor, device_str, dtype)
 
 _IMG_LOCK = threading.Lock()
@@ -194,26 +195,27 @@ def segment_text_prompt(
     processor.add_text_prompt(session, text=str(class_name))
 
     detections: List[_Detection] = []
-    with torch.no_grad():
-        for out in model.propagate_in_video_iterator(session):
-            obj_ids = list(getattr(out, "object_ids", []))
-            suppressed = set(getattr(out, "suppressed_obj_ids", []) or [])
-            removed = set(getattr(out, "removed_obj_ids", []) or [])
-            obj_to_mask = getattr(out, "obj_id_to_mask", {}) or {}
-            obj_to_score = getattr(out, "obj_id_to_score", {}) or {}
+    with _INFERENCE_LOCK:
+        with torch.no_grad():
+            for out in model.propagate_in_video_iterator(session):
+                obj_ids = list(getattr(out, "object_ids", []))
+                suppressed = set(getattr(out, "suppressed_obj_ids", []) or [])
+                removed = set(getattr(out, "removed_obj_ids", []) or [])
+                obj_to_mask = getattr(out, "obj_id_to_mask", {}) or {}
+                obj_to_score = getattr(out, "obj_id_to_score", {}) or {}
 
-            for oid in obj_ids:
-                if oid in suppressed or oid in removed:
-                    continue
-                score = float(obj_to_score.get(oid, 0.5))
-                if score < threshold:
-                    continue
-                mask = obj_to_mask.get(oid)
-                if mask is None:
-                    continue
-                det = _mask_to_detection(mask, score, target_size=image_size)
-                if det is not None:
-                    detections.append(det)
-            break  # single-frame only
+                for oid in obj_ids:
+                    if oid in suppressed or oid in removed:
+                        continue
+                    score = float(obj_to_score.get(oid, 0.5))
+                    if score < threshold:
+                        continue
+                    mask = obj_to_mask.get(oid)
+                    if mask is None:
+                        continue
+                    det = _mask_to_detection(mask, score, target_size=image_size)
+                    if det is not None:
+                        detections.append(det)
+                break  # single-frame only
 
     return detections
