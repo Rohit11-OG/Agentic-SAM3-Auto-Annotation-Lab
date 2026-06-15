@@ -77,7 +77,7 @@ def test_load_json_missing_returns_empty(tmp_path: Path) -> None:
 
 # ---------- AnnotatorGUI structure ----------
 def test_gui_builds(gui) -> None:
-    assert int(gui.notebook.index("end")) == 5  # 5 tabs (Setup, Run Log, Results, Video→Frames, Labeler)
+    assert int(gui.notebook.index("end")) == 6  # Dashboard, Setup, Run Log, Results, Video→Frames, Labeler
     assert str(gui.run_btn["state"]) == "normal"
     assert str(gui.cancel_btn["state"]) == "disabled"
     assert "labels_listbox" in dir(gui)

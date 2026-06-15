@@ -244,6 +244,8 @@ class AnnotatorGUI:
         self.root.bind("<Control-q>", lambda e: self._on_close())
         self.root.bind("<Escape>", lambda e: self._cancel_pipeline())
         self.root.bind("<F5>", lambda e: self._run_pipeline())
+        self.root.bind("<F1>", lambda e: self._show_hotkey_help())
+        self.root.bind("<Control-slash>", lambda e: self._show_hotkey_help())
 
     def _show_about(self) -> None:
         messagebox.showinfo(
@@ -253,15 +255,203 @@ class AnnotatorGUI:
             "Hotkeys: Ctrl+R run | Ctrl+B browse | Ctrl+T theme | Esc cancel",
         )
 
+    def _show_hotkey_help(self) -> None:
+        win = tk.Toplevel(self.root)
+        win.title("Keyboard Shortcuts")
+        win.geometry("520x420")
+        win.transient(self.root)
+        frm = ttk.Frame(win, padding=12)
+        frm.pack(fill="both", expand=True)
+        ttk.Label(frm, text="Keyboard Shortcuts", style="Header.TLabel").pack(anchor="w", pady=(0, 8))
+        groups = [
+            ("Pipeline", [
+                ("Ctrl+R / F5", "Run pipeline"),
+                ("Esc", "Cancel run"),
+                ("Ctrl+B", "Pick images folder"),
+                ("Ctrl+O", "Open config"),
+            ]),
+            ("View", [
+                ("Ctrl+T", "Toggle dark/light theme"),
+                ("Ctrl+Q", "Quit application"),
+                ("F1", "This help"),
+            ]),
+            ("Labeler", [
+                ("N / P", "Next / previous image"),
+                ("W / Y / E", "Rect / Polygon / Edit mode"),
+                ("Del", "Delete selected shape"),
+                ("Ctrl+S", "Save annotations JSON"),
+                ("Ctrl+Z", "Undo"),
+                ("Right-click / Double-click", "Finish polygon"),
+                ("Mouse wheel", "Zoom preview"),
+                ("Ctrl + drag", "Pan canvas"),
+            ]),
+        ]
+        body = scrolledtext.ScrolledText(frm, wrap="word", font=("Consolas", 10))
+        body.pack(fill="both", expand=True)
+        for title, pairs in groups:
+            body.insert("end", f"\n── {title} ──\n", "h")
+            for key, desc in pairs:
+                body.insert("end", f"  {key:<28} {desc}\n")
+        body.tag_configure("h", font=("Segoe UI", 10, "bold"))
+        body.configure(state="disabled")
+        ttk.Button(frm, text="Close", command=win.destroy).pack(anchor="e", pady=(8, 0))
+
+    # ---------- dashboard ----------
+    def _build_dashboard_tab(self) -> None:
+        frm = ttk.Frame(self.dashboard_tab, padding=12)
+        frm.pack(fill="both", expand=True)
+
+        header = ttk.Frame(frm)
+        header.pack(fill="x")
+        ttk.Label(header, text="Dashboard", style="Header.TLabel").pack(side="left")
+        ttk.Button(header, text="🔄 Refresh", command=self._refresh_dashboard).pack(side="right")
+        ttk.Button(header, text="📂 Open output", command=self._open_output).pack(side="right", padx=(0, 6))
+
+        # Stat cards row
+        cards = ttk.Frame(frm)
+        cards.pack(fill="x", pady=(12, 0))
+        self.dash_card_vars: Dict[str, tk.StringVar] = {}
+
+        def _card(parent, label: str, key: str) -> None:
+            c = ttk.LabelFrame(parent, text=label, padding=10)
+            c.pack(side="left", fill="x", expand=True, padx=4)
+            v = tk.StringVar(value="—")
+            self.dash_card_vars[key] = v
+            ttk.Label(c, textvariable=v, font=("Segoe UI", 22, "bold")).pack(anchor="center")
+
+        _card(cards, "Total images", "total")
+        _card(cards, "Accepted", "accepted")
+        _card(cards, "Human review", "human_review")
+        _card(cards, "Accept rate", "accept_rate")
+        _card(cards, "Avg confidence", "avg_conf")
+        _card(cards, "Total retries", "retries")
+
+        # Class distribution chart (ASCII bar)
+        chart_frm = ttk.LabelFrame(frm, text="Class distribution", padding=8)
+        chart_frm.pack(fill="both", expand=True, pady=(12, 0))
+        self.dash_chart = scrolledtext.ScrolledText(chart_frm, wrap="none", font=("Consolas", 10), height=14)
+        self.dash_chart.pack(fill="both", expand=True)
+
+        # Top issues panel
+        issues_frm = ttk.LabelFrame(frm, text="Top QA issues", padding=8)
+        issues_frm.pack(fill="x", pady=(8, 0))
+        self.dash_issues = scrolledtext.ScrolledText(issues_frm, wrap="word", font=("Consolas", 10), height=6)
+        self.dash_issues.pack(fill="x")
+
+    def _refresh_dashboard(self) -> None:
+        # Reset
+        for k, v in self.dash_card_vars.items():
+            v.set("—")
+        self.dash_chart.configure(state="normal")
+        self.dash_chart.delete("1.0", "end")
+        self.dash_issues.configure(state="normal")
+        self.dash_issues.delete("1.0", "end")
+
+        out = self.last_output_path or (
+            Path(self.output_path.get().strip()) if self.output_path.get().strip() else None
+        )
+        if not out or not out.exists():
+            self.dash_chart.insert("end", "(No run output found. Run pipeline first or pick an output folder.)\n")
+            self._lock_dashboard()
+            return
+        qa_file = out / "qa_report.json"
+        if not qa_file.exists():
+            self.dash_chart.insert("end", f"(qa_report.json not found in {out})\n")
+            self._lock_dashboard()
+            return
+        try:
+            data = json.loads(qa_file.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            self.dash_chart.insert("end", f"Could not parse qa_report.json: {exc}\n")
+            self._lock_dashboard()
+            return
+
+        total = int(data.get("total_images", 0))
+        status_counts = data.get("status_counts", {})
+        accepted = int(status_counts.get("ACCEPTED", 0))
+        hr = int(status_counts.get("HUMAN_REVIEW", 0))
+        retries = int(data.get("retries_total", 0))
+        accept_rate = float(data.get("accept_rate", 0.0))
+        avg_conf = float(data.get("avg_mask_confidence", 0.0))
+
+        self.dash_card_vars["total"].set(str(total))
+        self.dash_card_vars["accepted"].set(str(accepted))
+        self.dash_card_vars["human_review"].set(str(hr))
+        self.dash_card_vars["accept_rate"].set(f"{int(accept_rate * 100)}%")
+        self.dash_card_vars["avg_conf"].set(f"{avg_conf:.2f}")
+        self.dash_card_vars["retries"].set(str(retries))
+
+        # Class distribution bar chart (ASCII)
+        per_class = data.get("per_class_mask_counts", {})
+        max_count = max(per_class.values(), default=0) or 1
+        bar_w = 40
+        for cls, cnt in sorted(per_class.items(), key=lambda x: -x[1]):
+            n = int((cnt / max_count) * bar_w)
+            bar = "█" * n + "·" * (bar_w - n)
+            self.dash_chart.insert("end", f"{cls:<14} {bar} {cnt}\n")
+        if not per_class:
+            self.dash_chart.insert("end", "(no class detections recorded)\n")
+
+        # Top issues
+        issues = data.get("top_issues", []) or []
+        if not issues:
+            self.dash_issues.insert("end", "(no issues — all clean)\n")
+        else:
+            for item in issues[:10]:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    text, count = item
+                    self.dash_issues.insert("end", f"  ×{count}  {text}\n")
+                else:
+                    self.dash_issues.insert("end", f"  {item}\n")
+
+        self._lock_dashboard()
+
+    def _lock_dashboard(self) -> None:
+        self.dash_chart.configure(state="disabled")
+        self.dash_issues.configure(state="disabled")
+
+    # ---------- GPU widget ----------
+    def _refresh_gpu_widget(self) -> None:
+        try:
+            import torch  # type: ignore
+
+            if torch.cuda.is_available():
+                free, total = torch.cuda.mem_get_info()
+                used_gb = (total - free) / (1024 ** 3)
+                total_gb = total / (1024 ** 3)
+                self.gpu_var.set(f"GPU {used_gb:.1f}/{total_gb:.1f} GB")
+            else:
+                self.gpu_var.set("CPU only")
+        except Exception:  # noqa: BLE001
+            self.gpu_var.set("")
+        self.root.after(2000, self._refresh_gpu_widget)
+
     # ---------- layout ----------
     def _build_ui(self) -> None:
+        # Global toolbar above everything
+        toolbar = ttk.Frame(self.root, padding=(8, 4))
+        toolbar.pack(fill="x")
+        self.tb_run_btn = ttk.Button(toolbar, text="\u25b6 Run", style="Accent.TButton", command=self._run_pipeline)
+        self.tb_run_btn.pack(side="left", padx=2)
+        self.tb_cancel_btn = ttk.Button(toolbar, text="\u25a0 Cancel", command=self._cancel_pipeline, state="disabled")
+        self.tb_cancel_btn.pack(side="left", padx=2)
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
+        ttk.Button(toolbar, text="\ud83d\udcc1 Dataset", command=self._pick_dataset).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="\ud83d\udce4 Output", command=self._open_output).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="\ud83c\udff7 YOLO", command=self._open_yolo).pack(side="left", padx=2)
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
+        ttk.Button(toolbar, text="\ud83c\udf13 Theme", command=self._toggle_theme).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="\u2754 Help (F1)", command=self._show_hotkey_help).pack(side="right", padx=2)
+
         notebook = ttk.Notebook(self.root)
-        notebook.pack(fill="both", expand=True, padx=8, pady=8)
+        notebook.pack(fill="both", expand=True, padx=8, pady=(4, 8))
+        self.dashboard_tab = ttk.Frame(notebook)
         self.setup_tab = ttk.Frame(notebook)
         self.log_tab = ttk.Frame(notebook)
         self.results_tab = ttk.Frame(notebook)
         self.video_tab = ttk.Frame(notebook)
         self.labeler_tab = ttk.Frame(notebook)
+        notebook.add(self.dashboard_tab, text="Dashboard")
         notebook.add(self.setup_tab, text="Setup")
         notebook.add(self.log_tab, text="Run Log")
         notebook.add(self.results_tab, text="Results")
@@ -269,6 +459,7 @@ class AnnotatorGUI:
         notebook.add(self.labeler_tab, text="Labeler")
         self.notebook = notebook
 
+        self._build_dashboard_tab()
         self._build_setup_tab()
         self._build_log_tab()
         self._build_results_tab()
@@ -280,6 +471,8 @@ class AnnotatorGUI:
         status.pack(fill="x", padx=8, pady=(0, 6))
         self.status_var = tk.StringVar(value="Ready.")
         ttk.Label(status, textvariable=self.status_var, anchor="w").pack(side="left", fill="x", expand=True)
+        self.gpu_var = tk.StringVar(value="")
+        ttk.Label(status, textvariable=self.gpu_var, style="Muted.TLabel").pack(side="right", padx=(0, 8))
         self.elapsed_var = tk.StringVar(value="")
         ttk.Label(status, textvariable=self.elapsed_var, style="Muted.TLabel").pack(side="right", padx=(0, 8))
         self.progress = ttk.Progressbar(status, mode="determinate", length=260)
@@ -287,6 +480,8 @@ class AnnotatorGUI:
 
         # Apply theme to newly built widgets
         self._apply_theme()
+        # Start periodic GPU stat refresh
+        self._refresh_gpu_widget()
 
     def _build_setup_tab(self) -> None:
         frm = ttk.Frame(self.setup_tab, padding=12)
@@ -642,6 +837,10 @@ class AnnotatorGUI:
     def _set_running(self, running: bool) -> None:
         self.run_btn.configure(state=("disabled" if running else "normal"))
         self.cancel_btn.configure(state=("normal" if running else "disabled"))
+        if hasattr(self, "tb_run_btn"):
+            self.tb_run_btn.configure(state=("disabled" if running else "normal"))
+        if hasattr(self, "tb_cancel_btn"):
+            self.tb_cancel_btn.configure(state=("normal" if running else "disabled"))
         self.status_var.set("Running..." if running else "Done.")
         if not running:
             self.progress.configure(value=self.progress["maximum"])
@@ -775,6 +974,11 @@ class AnnotatorGUI:
             self.export_yolo_all_btn.configure(state="normal")
             self._load_labels_list()
             self._update_accept_all_btn_state()
+        # Auto-refresh dashboard with latest stats
+        try:
+            self._refresh_dashboard()
+        except Exception:  # noqa: BLE001
+            pass
         self.notebook.select(self.results_tab)
 
     # ---------- labels viewer ----------
