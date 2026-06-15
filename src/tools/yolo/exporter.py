@@ -11,20 +11,24 @@ def export_yolo(
     output_path: Path,
     label_schema: Optional[Sequence[str]] = None,
     segmentation: bool = False,
+    force_all: bool = False,
 ) -> Path:
     output_path.mkdir(parents=True, exist_ok=True)
     labels_dir = output_path / ("yolo_seg_labels" if segmentation else "yolo_labels")
     labels_dir.mkdir(parents=True, exist_ok=True)
 
-    accepted = [b for b in bundles if b.status == "ACCEPTED"]
+    if force_all:
+        targets = list(bundles)
+    else:
+        targets = [b for b in bundles if b.status == "ACCEPTED"]
 
     if label_schema:
         classes = list(label_schema)
     else:
-        classes = sorted({mask.class_id for bundle in accepted for mask in bundle.masks})
+        classes = sorted({mask.class_id for bundle in targets for mask in bundle.masks})
     class_to_id: Dict[str, int] = {name: i for i, name in enumerate(classes)}
 
-    for bundle in accepted:
+    for bundle in targets:
         lines: List[str] = []
         width = max(bundle.image.width, 1)
         height = max(bundle.image.height, 1)

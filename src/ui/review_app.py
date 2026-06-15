@@ -436,6 +436,8 @@ class AnnotatorGUI:
         search_entry.bind("<KeyRelease>", lambda e: self._refresh_labels_list())
         self.accept_btn = ttk.Button(controls, text="✓ Accept Annotation", command=self._accept_selected_annotation, state="disabled")
         self.accept_btn.pack(side="left", padx=(12, 0))
+        self.accept_all_btn = ttk.Button(controls, text="✓ Accept All Warnings", command=self._accept_all_warnings, state="disabled")
+        self.accept_all_btn.pack(side="left", padx=(6, 0))
 
         labels_row = ttk.Frame(right)
         labels_row.pack(fill="both", expand=True)
@@ -761,6 +763,7 @@ class AnnotatorGUI:
             self.export_all_btn.configure(state="normal")
             self.export_yolo_all_btn.configure(state="normal")
             self._load_labels_list()
+            self._update_accept_all_btn_state()
         self.notebook.select(self.results_tab)
 
     # ---------- labels viewer ----------
@@ -1165,6 +1168,7 @@ class AnnotatorGUI:
 
             # Load labels list
             self._load_labels_list()
+            self._update_accept_all_btn_state()
 
             # Read qa summary report if exists
             qa_file = out_dir / "qa_report.json"
@@ -1238,6 +1242,7 @@ class AnnotatorGUI:
 
         # Refresh listbox and maintain selection
         self._refresh_labels_list()
+        self._update_accept_all_btn_state()
 
         # Find the new index of the stem in the listbox and reselect it
         for i in range(self.labels_listbox.size()):
@@ -1249,6 +1254,74 @@ class AnnotatorGUI:
                 self.labels_listbox.activate(i)
                 self._on_label_select()
                 break
+
+    def _update_accept_all_btn_state(self) -> None:
+        has_hr = False
+        if self.last_bundles:
+            has_hr = any(b.status == "HUMAN_REVIEW" for b in self.last_bundles)
+        if has_hr:
+            self.accept_all_btn.configure(state="normal")
+        else:
+            self.accept_all_btn.configure(state="disabled")
+
+    def _accept_all_warnings(self) -> None:
+        if not self.last_bundles:
+            return
+
+        hr_bundles = [b for b in self.last_bundles if b.status == "HUMAN_REVIEW"]
+        if not hr_bundles:
+            messagebox.showinfo("No warnings", "No images with HUMAN_REVIEW status found.")
+            return
+
+        if not messagebox.askyesno(
+            "Confirm Accept All",
+            f"Are you sure you want to accept all {len(hr_bundles)} human review annotations?"
+        ):
+            return
+
+        # Update status of all human review bundles to ACCEPTED
+        for bundle in hr_bundles:
+            bundle.status = "ACCEPTED"
+            self._bundle_status[bundle.image.path.stem] = "ACCEPTED"
+
+        # Save conversation_logs.json
+        if self.last_output_path:
+            try:
+                from src.core.orchestrator import _export_conversation_logs
+                slim = True
+                if self.last_config:
+                    slim = self.last_config.slim_conversation_logs
+                _export_conversation_logs(self.last_bundles, self.last_output_path, slim=slim)
+            except Exception as exc:
+                messagebox.showerror("Error updating logs", f"Could not save changes to logs: {exc}")
+                return
+
+            # quiet YOLO export to keep output directory in sync
+            try:
+                from src.tools.yolo.exporter import export_yolo
+                label_schema = self._classes
+                if self.last_config:
+                    label_schema = self.last_config.label_schema
+
+                export_yolo(
+                    self.last_bundles,
+                    self.last_output_path,
+                    label_schema=label_schema,
+                    segmentation=self.last_config.yolo_segmentation if self.last_config else True,
+                    force_all=True,
+                )
+            except Exception as exc:
+                messagebox.showwarning("Warning", f"Could not export updated labels to YOLO files: {exc}")
+
+        # Refresh listbox and maintain selection
+        self._refresh_labels_list()
+        self._update_accept_all_btn_state()
+
+        sel = self.labels_listbox.curselection()
+        if sel:
+            self._on_label_select()
+
+        messagebox.showinfo("Success", f"Successfully accepted all {len(hr_bundles)} annotations.")
 
     def _export_all_to_yolo(self) -> None:
         cfg_path = Path(self.config_path.get().strip())
