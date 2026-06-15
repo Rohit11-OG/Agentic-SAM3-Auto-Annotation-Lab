@@ -70,7 +70,6 @@ def test_sam3_segment_text_prompt_api_backend(tmp_path, monkeypatch) -> None:
 
 def test_sam3_segment_exemplar_prompt_hf_local() -> None:
     import pytest
-    import warnings
     from pathlib import Path
 
     image = Path("sample.jpg")
