@@ -234,6 +234,42 @@ def sam3_segment_text_prompt(
     return _mock_text_prompt(image_path, class_name, model_name, params)
 
 
+def sam3_segment_text_prompts_multi(
+    image_path: Path,
+    class_prompts: List[Tuple[str, str]],
+    model_name: str,
+    params: Dict[str, Any],
+) -> Dict[str, List[RawMask]]:
+    """Multi-class text segmentation in a single SAM3 session (hf_local) when possible.
+
+    Falls back to per-class loop on other backends. ``class_prompts`` is a list
+    of ``(class_id, prompt_text)`` tuples.
+    """
+    backend = str(params.get("backend", "mock")).lower()
+    if backend == "hf_local":
+        try:
+            from src.tools.sam3.hf_backend import segment_text_prompts_multi as _hf_multi
+
+            grouped = _hf_multi(image_path, class_prompts, model_name, params)
+            return {
+                cls: [RawMask(polygon=d.polygon, bbox=d.bbox, area=d.area, confidence=d.confidence) for d in dets]
+                for cls, dets in grouped.items()
+            }
+        except Exception as exc:  # noqa: BLE001
+            if not params.get("allow_mock_fallback", True):
+                raise
+            warnings.warn(
+                f"SAM3 hf_local multi-prompt failed; per-class fallback. Reason: {exc}",
+                stacklevel=2,
+            )
+
+    # Generic per-class fallback (mock + sam3_api + any failure)
+    return {
+        cls: sam3_segment_text_prompt(image_path, prompt, model_name, params)
+        for cls, prompt in class_prompts
+    }
+
+
 def sam3_segment_exemplar_prompt(
     image_path: Path,
     exemplar_bbox: Tuple[int, int, int, int],
