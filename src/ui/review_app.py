@@ -13,13 +13,15 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from src.core.config_loader import load_project_config
 from src.core.logging_utils import setup_logging
 from src.core.orchestrator import list_image_paths, run_orchestrator
-from src.tools.prompt_interpreter import interpret_prompt
 from src.tools.video_extractor import VIDEO_SUFFIXES as _VIDEO_EXTS, extract_frames
+
+if TYPE_CHECKING:
+    from src.core.models import AnnotationBundle, ProjectConfig
 from src.ui._helpers import (
     IMAGE_EXTS,
     attach_tooltip,
