@@ -66,3 +66,27 @@ def test_sam3_segment_text_prompt_api_backend(tmp_path, monkeypatch) -> None:
     )
     assert len(masks) == 1
     assert masks[0].bbox == (1, 2, 30, 40)
+
+
+def test_sam3_segment_exemplar_prompt_hf_local() -> None:
+    import pytest
+    import warnings
+    from pathlib import Path
+
+    image = Path("sample.jpg")
+    
+    # 1. Fallback disabled -> raises RuntimeError
+    with pytest.raises(RuntimeError, match="hf_local backend does not support exemplar"):
+        sam3_segment_exemplar_prompt(
+            image, (1, 2, 30, 40), "sam3_b",
+            {"backend": "hf_local", "allow_mock_fallback": False}
+        )
+
+    # 2. Fallback enabled -> warns and returns mock
+    with pytest.warns(UserWarning, match="does not support exemplar prompting"):
+        masks = sam3_segment_exemplar_prompt(
+            image, (1, 2, 30, 40), "sam3_b",
+            {"backend": "hf_local", "allow_mock_fallback": True}
+        )
+    assert len(masks) == 1
+    assert masks[0].bbox == (1, 2, 30, 40)
