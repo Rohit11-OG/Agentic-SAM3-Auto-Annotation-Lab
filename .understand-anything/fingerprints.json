@@ -1,0 +1,2772 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "b5b205011260023b98f4ac06ef14dcc5f6617033",
+  "generatedAt": "2026-05-30T12:57:54.129Z",
+  "files": {
+    ".understand-anything/.understandignore": {
+      "filePath": ".understand-anything/.understandignore",
+      "contentHash": "b0167068c0f278de210500b942d07b06b3efa3a01552dca40ecb24d0dfca0453",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": false
+    },
+    "CLAUDE_TEACHING_PROFILE.md": {
+      "filePath": "CLAUDE_TEACHING_PROFILE.md",
+      "contentHash": "4a37e089aecd03f5a14cd1d735737ae1ee8c461cd852079011538e54467cfb26",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 134,
+      "hasStructuralAnalysis": true
+    },
+    "config/project_example.yaml": {
+      "filePath": "config/project_example.yaml",
+      "contentHash": "0fea0c7ebcb4a44b241a9266762b1cc0a2bf56b20c92c79eeac4f1f89f50c7e1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 46,
+      "hasStructuralAnalysis": true
+    },
+    "data/images/.gitkeep": {
+      "filePath": "data/images/.gitkeep",
+      "contentHash": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": false
+    },
+    "docs/agent-spec.md": {
+      "filePath": "docs/agent-spec.md",
+      "contentHash": "23162baae3c70d1bc1ffc2a25386d100cc876f270f24c0efb812f3febffbe45b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 537,
+      "hasStructuralAnalysis": true
+    },
+    "notebooks/exploration.ipynb": {
+      "filePath": "notebooks/exploration.ipynb",
+      "contentHash": "ccc3a4e995267769ad35d4cf2bc3f35f0ce1daefa7f6cc892e706dd19b9a0608",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": false
+    },
+    "pyproject.toml": {
+      "filePath": "pyproject.toml",
+      "contentHash": "59c1401825d61321d80a5c56e4c42ed9d6d25e7ce824d4ca2e183da9efd81b28",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 37,
+      "hasStructuralAnalysis": true
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "42d45f66888d955ee769f3cbdd953200e8b24bae695b63cab34619a03431d63c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 277,
+      "hasStructuralAnalysis": true
+    },
+    "src/__init__.py": {
+      "filePath": "src/__init__.py",
+      "contentHash": "6ed15e09e0e0cbb28e4f91ebb10af94e4d4773b04a749e4950a8d612f786964b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "src/agents/__init__.py": {
+      "filePath": "src/agents/__init__.py",
+      "contentHash": "d2f70c30914dd66f44657a8ce5de887cb53f31c85f97184a9c1cba7c5dbe0c0f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "src/agents/base_agent.py": {
+      "filePath": "src/agents/base_agent.py",
+      "contentHash": "5b03ce7900dc6d2d72fb60ae6f213a5039b731d52445164fcc942619e145d401",
+      "functions": [],
+      "classes": [
+        {
+          "name": "BaseAgent",
+          "methods": [
+            "__init__",
+            "should_respond",
+            "respond"
+          ],
+          "properties": [
+            "name"
+          ],
+          "exported": true,
+          "lineCount": 13
+        }
+      ],
+      "imports": [
+        {
+          "source": "abc",
+          "specifiers": [
+            "ABC",
+            "abstractmethod"
+          ]
+        },
+        {
+          "source": "src.core.models",
+          "specifiers": [
+            "AnnotationBundle",
+            "ConversationMessage"
+          ]
+        }
+      ],
+      "exports": [
+        "BaseAgent"
+      ],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "src/agents/coordinator_agent.py": {
+      "filePath": "src/agents/coordinator_agent.py",
+      "contentHash": "15e4be3d49329ccae78b574a05b9f94daa098bb44c7066299945ed236ce7581b",
+      "functions": [],
+      "classes": [
+        {
+          "name": "CoordinatorAgent",
+          "methods": [
+            "__init__",
+            "should_respond",
+            "_next_for_new",
+            "_after_annotation",
+            "_after_qa",
+            "respond"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 121
+        }
+      ],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "Dict",
+            "List"
+          ]
+        },
+        {
+          "source": "src.agents.base_agent",
+          "specifiers": [
+            "BaseAgent"
+          ]
+        },
+        {
+          "source": "src.core.models",
+          "specifiers": [
+            "AnnotationBundle",
+            "ConversationMessage"
+          ]
+        }
+      ],
+      "exports": [
+        "CoordinatorAgent"
+      ],
+      "totalLines": 130,
+      "hasStructuralAnalysis": true
+    },
+    "src/agents/curation_agent.py": {
+      "filePath": "src/agents/curation_agent.py",
+      "contentHash": "98195cb7ecbbaae9b08aca5ea72ec6897c0847c7fcdb0b796483231533a72fcc",
+      "functions": [],
+      "classes": [
+        {
+          "name": "CurationAgent",
+          "methods": [
+            "__init__",
+            "should_respond",
+            "_quality_checks",
+            "_maybe_caption",
+            "respond"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 138
+        }
+      ],
+      "imports": [
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "Counter"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Callable",
+            "Dict",
+            "List",
+            "Optional"
+          ]
+        },
+        {
+          "source": "src.agents.base_agent",
+          "specifiers": [
+            "BaseAgent"
+          ]
+        },
+        {
+          "source": "src.core.models",
+          "specifiers": [
+            "AnnotationBundle",
+            "ConversationMessage",
+            "QAResult"
+          ]
+        },
+        {
+          "source": "src.tools.geometry",
+          "specifiers": [
+            "pairwise_bbox_iou"
+          ]
+        }
+      ],
+      "exports": [
+        "CurationAgent"
+      ],
+      "totalLines": 150,
+      "hasStructuralAnalysis": true
+    },
+    "src/agents/sam3_agent.py": {
+      "filePath": "src/agents/sam3_agent.py",
+      "contentHash": "6e4ad9658bc9c93f620a2aef7f006c9a95a9c294d169a37536ee570663cbabab",
+      "functions": [],
+      "classes": [
+        {
+          "name": "SAM3Agent",
+          "methods": [
+            "__init__",
+            "should_respond",
+            "_extract_request",
+            "respond"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 85
+        }
+      ],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Dict",
+            "List"
+          ]
+        },
+        {
+          "source": "src.agents.base_agent",
+          "specifiers": [
+            "BaseAgent"
+          ]
+        },
+        {
+          "source": "src.core.models",
+          "specifiers": [
+            "AnnotationBundle",
+            "ConversationMessage",
+            "MaskRecord",
+            "new_mask_id"
+          ]
+        },
+        {
+          "source": "src.tools.sam3",
+          "specifiers": [
+            "sam3_segment_exemplar_prompt",
+            "sam3_segment_text_prompt"
+          ]
+        }
+      ],
+      "exports": [
+        "SAM3Agent"
+      ],
+      "totalLines": 95,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/__init__.py": {
+      "filePath": "src/core/__init__.py",
+      "contentHash": "df21c85e219d367e2007615836d191f245c28fe808344031ade36b8923584095",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/config_loader.py": {
+      "filePath": "src/core/config_loader.py",
+      "contentHash": "c7066c157198ed3ed145dce27f3e593b10c53ba91945476ba8e7aabe062c61ca",
+      "functions": [
+        {
+          "name": "_require_mapping",
+          "params": [
+            "data",
+            "key"
+          ],
+          "returnType": "Dict[str, Any]",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "load_project_config",
+          "params": [
+            "config_path"
+          ],
+          "returnType": "ProjectConfig",
+          "exported": true,
+          "lineCount": 45
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Dict"
+          ]
+        },
+        {
+          "source": "yaml",
+          "specifiers": [
+            "yaml"
+          ]
+        },
+        {
+          "source": "src.core.models",
+          "specifiers": [
+            "HumanReviewPolicy",
+            "ProjectConfig"
+          ]
+        }
+      ],
+      "exports": [
+        "_require_mapping",
+        "load_project_config"
+      ],
+      "totalLines": 63,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/logging_utils.py": {
+      "filePath": "src/core/logging_utils.py",
+      "contentHash": "6a48567014c544093d86aaa18f4bca8cc7575181ada25d8ee785c4342bd5bf0f",
+      "functions": [
+        {
+          "name": "setup_logging",
+          "params": [
+            "log_dir",
+            "level"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 24
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "logging",
+          "specifiers": [
+            "logging"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        }
+      ],
+      "exports": [
+        "setup_logging"
+      ],
+      "totalLines": 31,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/models.py": {
+      "filePath": "src/core/models.py",
+      "contentHash": "1363b412b2fbd4f8e1ba09009bb21c03fec43b58cfa392e4e7ce4889e24534df",
+      "functions": [
+        {
+          "name": "new_mask_id",
+          "params": [],
+          "returnType": "MaskId",
+          "exported": true,
+          "lineCount": 2
+        }
+      ],
+      "classes": [
+        {
+          "name": "HumanReviewPolicy",
+          "methods": [],
+          "properties": [
+            "enabled",
+            "max_retries"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "ProjectConfig",
+          "methods": [],
+          "properties": [
+            "project_name",
+            "dataset_path",
+            "output_path",
+            "label_schema",
+            "sam3_model_name",
+            "max_retries",
+            "min_mask_area",
+            "max_mask_area",
+            "qa_iou_threshold",
+            "qa_confidence_threshold",
+            "enable_captioning",
+            "llm_model_name",
+            "human_review_policy",
+            "sam3_params",
+            "max_turns_per_bundle",
+            "max_workers",
+            "user_prompt",
+            "per_class_prompt",
+            "yolo_segmentation",
+            "slim_conversation_logs"
+          ],
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "ImageRecord",
+          "methods": [
+            "area_pixels"
+          ],
+          "properties": [
+            "id",
+            "path",
+            "width",
+            "height",
+            "meta"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "MaskRecord",
+          "methods": [],
+          "properties": [
+            "mask_id",
+            "image_id",
+            "class_id",
+            "polygon",
+            "bbox",
+            "area",
+            "confidence",
+            "source",
+            "version"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "QAResult",
+          "methods": [],
+          "properties": [
+            "image_id",
+            "quality_score",
+            "issues",
+            "decision",
+            "hints"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "ConversationMessage",
+          "methods": [],
+          "properties": [
+            "message_id",
+            "image_id",
+            "sender",
+            "role",
+            "content",
+            "actions",
+            "timestamp"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "AnnotationBundle",
+          "methods": [],
+          "properties": [
+            "image",
+            "masks",
+            "qa_result",
+            "status",
+            "history",
+            "retry_count"
+          ],
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "imports": [
+        {
+          "source": "datetime",
+          "specifiers": [
+            "datetime",
+            "timezone"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Dict",
+            "List",
+            "Literal",
+            "Optional",
+            "Tuple"
+          ]
+        },
+        {
+          "source": "uuid",
+          "specifiers": [
+            "uuid4"
+          ]
+        },
+        {
+          "source": "pydantic",
+          "specifiers": [
+            "BaseModel",
+            "Field"
+          ]
+        }
+      ],
+      "exports": [
+        "HumanReviewPolicy",
+        "ProjectConfig",
+        "ImageRecord",
+        "MaskRecord",
+        "QAResult",
+        "ConversationMessage",
+        "AnnotationBundle",
+        "new_mask_id"
+      ],
+      "totalLines": 102,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/orchestrator.py": {
+      "filePath": "src/core/orchestrator.py",
+      "contentHash": "50ebd814922bfb06ed1e0bd4a2e3282861db494f457b7fc278f71b8d86ecd3ba",
+      "functions": [
+        {
+          "name": "_read_image_size",
+          "params": [
+            "image_path"
+          ],
+          "returnType": "Tuple[int, int]",
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "list_image_paths",
+          "params": [
+            "dataset_path",
+            "recursive"
+          ],
+          "returnType": "List[Path]",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "discover_images",
+          "params": [
+            "dataset_path",
+            "recursive"
+          ],
+          "returnType": "List[ImageRecord]",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "_append_message",
+          "params": [
+            "bundle",
+            "message"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "_apply_actions",
+          "params": [
+            "bundle",
+            "message"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "_contains_action",
+          "params": [
+            "message",
+            "action_name"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "run_bundle_conversation",
+          "params": [
+            "bundle",
+            "config",
+            "coordinator",
+            "sam3_agent",
+            "curation_agent",
+            "max_turns"
+          ],
+          "returnType": "AnnotationBundle",
+          "exported": true,
+          "lineCount": 48
+        },
+        {
+          "name": "_slim_message",
+          "params": [
+            "msg_dict"
+          ],
+          "returnType": "dict",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "_export_conversation_logs",
+          "params": [
+            "bundles",
+            "output_path",
+            "slim"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "_normalize_issue",
+          "params": [
+            "text"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_export_qa_report",
+          "params": [
+            "bundles",
+            "output_path",
+            "label_schema"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 47
+        },
+        {
+          "name": "run_orchestrator",
+          "params": [
+            "config",
+            "cancel_event"
+          ],
+          "returnType": "List[AnnotationBundle]",
+          "exported": true,
+          "lineCount": 67
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "logging",
+          "specifiers": [
+            "logging"
+          ]
+        },
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "struct",
+          "specifiers": [
+            "struct"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "concurrent.futures",
+          "specifiers": [
+            "ThreadPoolExecutor"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Iterable",
+            "List",
+            "Optional",
+            "Tuple"
+          ]
+        },
+        {
+          "source": "src.agents.coordinator_agent",
+          "specifiers": [
+            "CoordinatorAgent"
+          ]
+        },
+        {
+          "source": "src.agents.curation_agent",
+          "specifiers": [
+            "CurationAgent"
+          ]
+        },
+        {
+          "source": "src.agents.sam3_agent",
+          "specifiers": [
+            "SAM3Agent"
+          ]
+        },
+        {
+          "source": "src.core.models",
+          "specifiers": [
+            "AnnotationBundle",
+            "ConversationMessage",
+            "ImageRecord",
+            "MaskRecord",
+            "ProjectConfig",
+            "QAResult"
+          ]
+        },
+        {
+          "source": "src.tools.captioning",
+          "specifiers": [
+            "caption_image"
+          ]
+        },
+        {
+          "source": "src.tools.yolo",
+          "specifiers": [
+            "export_yolo"
+          ]
+        }
+      ],
+      "exports": [
+        "_read_image_size",
+        "list_image_paths",
+        "discover_images",
+        "_append_message",
+        "_apply_actions",
+        "_contains_action",
+        "run_bundle_conversation",
+        "_slim_message",
+        "_export_conversation_logs",
+        "_normalize_issue",
+        "_export_qa_report",
+        "run_orchestrator"
+      ],
+      "totalLines": 362,
+      "hasStructuralAnalysis": true
+    },
+    "src/main.py": {
+      "filePath": "src/main.py",
+      "contentHash": "c79509555477b1494697eb7e7a7685ecf68da990fce55774608ba4f4eb548ba8",
+      "functions": [
+        {
+          "name": "parse_args",
+          "params": [],
+          "returnType": "argparse.Namespace",
+          "exported": true,
+          "lineCount": 34
+        },
+        {
+          "name": "_apply_overrides",
+          "params": [
+            "config",
+            "args"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_apply_prompt",
+          "params": [
+            "config",
+            "args"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 36
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "logging",
+          "specifiers": [
+            "logging"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "src.core.config_loader",
+          "specifiers": [
+            "load_project_config"
+          ]
+        },
+        {
+          "source": "src.core.logging_utils",
+          "specifiers": [
+            "setup_logging"
+          ]
+        },
+        {
+          "source": "src.core.orchestrator",
+          "specifiers": [
+            "discover_images",
+            "run_orchestrator"
+          ]
+        },
+        {
+          "source": "src.tools.prompt_interpreter",
+          "specifiers": [
+            "interpret_prompt"
+          ]
+        }
+      ],
+      "exports": [
+        "parse_args",
+        "_apply_overrides",
+        "_apply_prompt",
+        "main"
+      ],
+      "totalLines": 124,
+      "hasStructuralAnalysis": true
+    },
+    "src/tools/__init__.py": {
+      "filePath": "src/tools/__init__.py",
+      "contentHash": "8ee5593598d86320a04805f1603f20466be2b19700ce245998d7bbd7d4faae09",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "src/tools/captioning.py": {
+      "filePath": "src/tools/captioning.py",
+      "contentHash": "423b95b4c62f0f73cb7ce1c53bca288597fb0af01cafcc2a9c42b4ecab0f49cc",
+      "functions": [
+        {
+          "name": "caption_image",
+          "params": [
+            "image_path"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        }
+      ],
+      "exports": [
+        "caption_image"
+      ],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "src/tools/geometry.py": {
+      "filePath": "src/tools/geometry.py",
+      "contentHash": "19c70440a5728e585ad1537dec5fe13c901df7c1b5777484261ade814b183eaf",
+      "functions": [
+        {
+          "name": "compute_area",
+          "params": [
+            "mask"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "compute_iou",
+          "params": [
+            "mask1",
+            "mask2"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "bbox_iou",
+          "params": [
+            "box_a",
+            "box_b"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "summarize_masks",
+          "params": [
+            "masks"
+          ],
+          "returnType": "Dict[str, Any]",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "pairwise_bbox_iou",
+          "params": [
+            "masks"
+          ],
+          "returnType": "List[Dict[str, Any]]",
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "collections",
+          "specifiers": [
+            "Counter"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Dict",
+            "Iterable",
+            "List"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.core.models",
+          "specifiers": [
+            "MaskRecord"
+          ]
+        }
+      ],
+      "exports": [
+        "compute_area",
+        "compute_iou",
+        "bbox_iou",
+        "summarize_masks",
+        "pairwise_bbox_iou"
+      ],
+      "totalLines": 84,
+      "hasStructuralAnalysis": true
+    },
+    "src/tools/prompt_interpreter.py": {
+      "filePath": "src/tools/prompt_interpreter.py",
+      "contentHash": "701844b6d4a730862437d64b0a4b0563af7a6fc77c8ca6d53dddb3543d48c859",
+      "functions": [
+        {
+          "name": "_canonical_for",
+          "params": [
+            "token"
+          ],
+          "returnType": "Optional[str]",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "interpret_prompt",
+          "params": [
+            "user_prompt",
+            "fallback_schema"
+          ],
+          "returnType": "PromptPlan",
+          "exported": true,
+          "lineCount": 67
+        }
+      ],
+      "classes": [
+        {
+          "name": "PromptPlan",
+          "methods": [],
+          "properties": [
+            "classes",
+            "per_class_prompt",
+            "raw_input",
+            "notes"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "difflib",
+          "specifiers": [
+            "get_close_matches"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Dict",
+            "List",
+            "Optional"
+          ]
+        }
+      ],
+      "exports": [
+        "PromptPlan",
+        "_canonical_for",
+        "interpret_prompt"
+      ],
+      "totalLines": 156,
+      "hasStructuralAnalysis": true
+    },
+    "src/tools/sam3/__init__.py": {
+      "filePath": "src/tools/sam3/__init__.py",
+      "contentHash": "7c5bde55c23abede0315767fb120d7af697d7a54f2eb2d9766f50f4a2fc3d456",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "src.tools.sam3.client",
+          "specifiers": [
+            "RawMask",
+            "sam3_segment_exemplar_prompt",
+            "sam3_segment_text_prompt"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
+    "src/tools/sam3/client.py": {
+      "filePath": "src/tools/sam3/client.py",
+      "contentHash": "45fac3bd677911b3bed24adefedba72d028dee2b8af08a5aa2952b7b56d88808",
+      "functions": [
+        {
+          "name": "_seed_from",
+          "params": [
+            "image_path",
+            "class_name"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "_mock_text_prompt",
+          "params": [
+            "image_path",
+            "class_name",
+            "model_name",
+            "params"
+          ],
+          "returnType": "List[RawMask]",
+          "exported": true,
+          "lineCount": 57
+        },
+        {
+          "name": "_peek_image_size",
+          "params": [
+            "image_path"
+          ],
+          "returnType": "Tuple[int, int]",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_mock_exemplar_prompt",
+          "params": [
+            "exemplar_bbox",
+            "params"
+          ],
+          "returnType": "List[RawMask]",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "_coerce_raw_masks",
+          "params": [
+            "raw_masks"
+          ],
+          "returnType": "List[RawMask]",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "_call_sam3_api",
+          "params": [
+            "payload",
+            "params"
+          ],
+          "returnType": "List[RawMask]",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "_build_api_payload",
+          "params": [
+            "image_path",
+            "model_name",
+            "mode",
+            "params",
+            "class_name",
+            "exemplar_bbox"
+          ],
+          "returnType": "Dict[str, Any]",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "sam3_segment_text_prompt",
+          "params": [
+            "image_path",
+            "class_name",
+            "model_name",
+            "params"
+          ],
+          "returnType": "List[RawMask]",
+          "exported": true,
+          "lineCount": 49
+        },
+        {
+          "name": "sam3_segment_exemplar_prompt",
+          "params": [
+            "image_path",
+            "exemplar_bbox",
+            "model_name",
+            "params"
+          ],
+          "returnType": "List[RawMask]",
+          "exported": true,
+          "lineCount": 24
+        }
+      ],
+      "classes": [
+        {
+          "name": "RawMask",
+          "methods": [],
+          "properties": [
+            "polygon",
+            "bbox",
+            "area",
+            "confidence"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "base64",
+          "specifiers": [
+            "base64"
+          ]
+        },
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "warnings",
+          "specifiers": [
+            "warnings"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "random",
+          "specifiers": [
+            "Random"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Dict",
+            "List",
+            "Tuple"
+          ]
+        },
+        {
+          "source": "urllib",
+          "specifiers": [
+            "urlrequest"
+          ]
+        }
+      ],
+      "exports": [
+        "RawMask",
+        "_seed_from",
+        "_mock_text_prompt",
+        "_peek_image_size",
+        "_mock_exemplar_prompt",
+        "_coerce_raw_masks",
+        "_call_sam3_api",
+        "_build_api_payload",
+        "sam3_segment_text_prompt",
+        "sam3_segment_exemplar_prompt"
+      ],
+      "totalLines": 261,
+      "hasStructuralAnalysis": true
+    },
+    "src/tools/sam3/hf_backend.py": {
+      "filePath": "src/tools/sam3/hf_backend.py",
+      "contentHash": "31ab285409baa2d103816658b3dcbd25c7a627e8c4c3829b2eb6a4dc26232e09",
+      "functions": [
+        {
+          "name": "_resolve_device",
+          "params": [
+            "prefer"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_load_model",
+          "params": [
+            "repo_id",
+            "params"
+          ],
+          "returnType": "Tuple[Any, Any, str, Any]",
+          "exported": true,
+          "lineCount": 42
+        },
+        {
+          "name": "_mask_to_detection",
+          "params": [
+            "mask",
+            "confidence",
+            "target_size"
+          ],
+          "returnType": "Optional[_Detection]",
+          "exported": true,
+          "lineCount": 69
+        },
+        {
+          "name": "segment_text_prompt",
+          "params": [
+            "image_path",
+            "class_name",
+            "model_name",
+            "params"
+          ],
+          "returnType": "List[_Detection]",
+          "exported": true,
+          "lineCount": 50
+        }
+      ],
+      "classes": [
+        {
+          "name": "_Detection",
+          "methods": [],
+          "properties": [
+            "polygon",
+            "bbox",
+            "area",
+            "confidence"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "logging",
+          "specifiers": [
+            "logging"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Dict",
+            "List",
+            "Optional",
+            "Tuple"
+          ]
+        }
+      ],
+      "exports": [
+        "_Detection",
+        "_resolve_device",
+        "_load_model",
+        "_mask_to_detection",
+        "segment_text_prompt"
+      ],
+      "totalLines": 203,
+      "hasStructuralAnalysis": true
+    },
+    "src/tools/yolo/__init__.py": {
+      "filePath": "src/tools/yolo/__init__.py",
+      "contentHash": "e7d738eda2b8d63804b82fe8dd70de2d9475e105e13d3bf3cd3fc9c0a586dca1",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "src.tools.yolo.exporter",
+          "specifiers": [
+            "export_yolo"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": true
+    },
+    "src/tools/yolo/exporter.py": {
+      "filePath": "src/tools/yolo/exporter.py",
+      "contentHash": "555c4dda87a34b71d6c9590b9f6121021276b6cfa5cfac30fcb3f82eb94c8054",
+      "functions": [
+        {
+          "name": "export_yolo",
+          "params": [
+            "bundles",
+            "output_path",
+            "label_schema",
+            "segmentation"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 56
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Dict",
+            "List",
+            "Optional",
+            "Sequence"
+          ]
+        },
+        {
+          "source": "src.core.models",
+          "specifiers": [
+            "AnnotationBundle"
+          ]
+        }
+      ],
+      "exports": [
+        "export_yolo"
+      ],
+      "totalLines": 65,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/__init__.py": {
+      "filePath": "src/ui/__init__.py",
+      "contentHash": "68b495480ba2344021abf61491c48ae3b986669dd899623aefa29ff017970900",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/_helpers.py": {
+      "filePath": "src/ui/_helpers.py",
+      "contentHash": "2e52f881f5ed6b80f0dbb528d6aa4145e060b1ebe53ba224a781e737beb12f32",
+      "functions": [
+        {
+          "name": "project_root",
+          "params": [],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "resolve_path",
+          "params": [
+            "p"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "color_for",
+          "params": [
+            "class_name"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "load_json",
+          "params": [
+            "path"
+          ],
+          "returnType": "dict | list",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "save_json",
+          "params": [
+            "path",
+            "data"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "open_in_explorer",
+          "params": [
+            "path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "attach_tooltip",
+          "params": [
+            "widget",
+            "text"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 27
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "subprocess",
+          "specifiers": [
+            "subprocess"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "tkinter",
+          "specifiers": [
+            "tk"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        }
+      ],
+      "exports": [
+        "project_root",
+        "resolve_path",
+        "color_for",
+        "load_json",
+        "save_json",
+        "open_in_explorer",
+        "attach_tooltip"
+      ],
+      "totalLines": 91,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/labeler.py": {
+      "filePath": "src/ui/labeler.py",
+      "contentHash": "99818d39af87b7696591edce1c8dc23f4f69c25e5e6a3dd0295678144ae139a6",
+      "functions": [],
+      "classes": [
+        {
+          "name": "_Shape",
+          "methods": [
+            "__init__",
+            "clone",
+            "to_labelme",
+            "from_labelme"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "LabelerPanel",
+          "methods": [
+            "__init__",
+            "_build",
+            "_bind_keys",
+            "_set_mode",
+            "_update_mode_buttons",
+            "_snapshot",
+            "_undo",
+            "_load_folder",
+            "_populate_files",
+            "_on_file_select",
+            "_next_image",
+            "_prev_image",
+            "_sync_file_list_selection",
+            "_confirm_unsaved",
+            "_load_image",
+            "_add_class",
+            "_refresh_label_list",
+            "_on_label_pick",
+            "_fit_scale",
+            "_image_to_canvas",
+            "_canvas_to_image",
+            "_render",
+            "_draw_shape",
+            "_on_motion",
+            "_on_click",
+            "_on_drag",
+            "_on_release",
+            "_on_right_click",
+            "_on_double_click",
+            "_finish_polygon",
+            "_cancel_draft",
+            "_begin_edit_pick",
+            "_update_dragged_vertex",
+            "_on_wheel",
+            "_zoom_by",
+            "_fit_view",
+            "_refresh_shape_list",
+            "_on_shape_pick",
+            "_delete_selected_shape",
+            "_update_counts",
+            "_save_json",
+            "_auto_annotate"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 770
+        }
+      ],
+      "imports": [
+        {
+          "source": "base64",
+          "specifiers": [
+            "base64"
+          ]
+        },
+        {
+          "source": "io",
+          "specifiers": [
+            "io"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "tkinter",
+          "specifiers": [
+            "filedialog",
+            "messagebox"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Dict",
+            "List",
+            "Optional",
+            "Tuple"
+          ]
+        },
+        {
+          "source": "tkinter",
+          "specifiers": [
+            "tk"
+          ]
+        },
+        {
+          "source": "tkinter",
+          "specifiers": [
+            "ttk"
+          ]
+        },
+        {
+          "source": "src.ui._helpers",
+          "specifiers": [
+            "IMAGE_EXTS",
+            "_color_for"
+          ]
+        }
+      ],
+      "exports": [
+        "_Shape",
+        "LabelerPanel"
+      ],
+      "totalLines": 829,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/review_app.py": {
+      "filePath": "src/ui/review_app.py",
+      "contentHash": "41d852f979fc3d88fc0633cd9389509e9c20a34620e193ed3a9845ab8e3987d8",
+      "functions": [
+        {
+          "name": "_load_recent",
+          "params": [],
+          "returnType": "List[str]",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_save_recent",
+          "params": [
+            "items"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "_install_safety_guards",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_install_tk_error_handler",
+          "params": [
+            "root"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "launch_review_app",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "classes": [
+        {
+          "name": "_QueueHandler",
+          "methods": [
+            "__init__",
+            "emit"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "AnnotatorGUI",
+          "methods": [
+            "__init__",
+            "_palette",
+            "_apply_theme",
+            "_reconfigure_log_tags",
+            "_toggle_theme",
+            "_build_menu",
+            "_bind_hotkeys",
+            "_show_about",
+            "_build_ui",
+            "_build_setup_tab",
+            "_build_labeler_tab",
+            "_build_log_tab",
+            "_build_results_tab",
+            "_pick_config",
+            "_pick_dataset",
+            "_scan_recursive",
+            "_after_recursive",
+            "_pick_output",
+            "_append_log",
+            "_poll_log_queue",
+            "_start_timer",
+            "_tick_timer",
+            "_stop_timer",
+            "_set_running",
+            "_cancel_pipeline",
+            "_run_pipeline",
+            "_do_run",
+            "_finish_ok",
+            "_load_labels_list",
+            "_refresh_labels_list",
+            "_on_label_select",
+            "_draw_preview",
+            "_on_canvas_wheel",
+            "_on_canvas_press",
+            "_on_canvas_drag",
+            "_on_canvas_release",
+            "_reset_view",
+            "_save_preview",
+            "_export_all_previews",
+            "_open_output",
+            "_open_yolo",
+            "_on_close"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 916
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "logging",
+          "specifiers": [
+            "logging"
+          ]
+        },
+        {
+          "source": "queue",
+          "specifiers": [
+            "queue"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "tkinter",
+          "specifiers": [
+            "tk"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "tkinter",
+          "specifiers": [
+            "filedialog",
+            "messagebox",
+            "scrolledtext",
+            "ttk"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Dict",
+            "List",
+            "Optional"
+          ]
+        },
+        {
+          "source": "src.core.config_loader",
+          "specifiers": [
+            "load_project_config"
+          ]
+        },
+        {
+          "source": "src.core.logging_utils",
+          "specifiers": [
+            "setup_logging"
+          ]
+        },
+        {
+          "source": "src.core.orchestrator",
+          "specifiers": [
+            "list_image_paths",
+            "run_orchestrator"
+          ]
+        },
+        {
+          "source": "src.tools.prompt_interpreter",
+          "specifiers": [
+            "interpret_prompt"
+          ]
+        },
+        {
+          "source": "src.ui._helpers",
+          "specifiers": [
+            "IMAGE_EXTS",
+            "attach_tooltip",
+            "load_json",
+            "open_in_explorer",
+            "project_root",
+            "resolve_path",
+            "save_json"
+          ]
+        },
+        {
+          "source": "src.ui.labeler",
+          "specifiers": [
+            "LabelerPanel"
+          ]
+        }
+      ],
+      "exports": [
+        "_load_recent",
+        "_save_recent",
+        "_QueueHandler",
+        "AnnotatorGUI",
+        "_install_safety_guards",
+        "_install_tk_error_handler",
+        "launch_review_app"
+      ],
+      "totalLines": 1056,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_agents.py": {
+      "filePath": "tests/test_agents.py",
+      "contentHash": "332dcdf4334359ce6463e7f4d7c13c08f808dd611d3b428f5b6ac7dd241aa88f",
+      "functions": [
+        {
+          "name": "_make_config",
+          "params": [
+            "**overrides"
+          ],
+          "returnType": "ProjectConfig",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "test_single_bundle_reaches_terminal_state",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "test_curation_flags_empty_masks",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "test_curation_caption_memoized",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "src.agents.coordinator_agent",
+          "specifiers": [
+            "CoordinatorAgent"
+          ]
+        },
+        {
+          "source": "src.agents.curation_agent",
+          "specifiers": [
+            "CurationAgent"
+          ]
+        },
+        {
+          "source": "src.agents.sam3_agent",
+          "specifiers": [
+            "SAM3Agent"
+          ]
+        },
+        {
+          "source": "src.core.models",
+          "specifiers": [
+            "AnnotationBundle",
+            "ImageRecord",
+            "ProjectConfig"
+          ]
+        },
+        {
+          "source": "src.core.orchestrator",
+          "specifiers": [
+            "run_bundle_conversation"
+          ]
+        }
+      ],
+      "exports": [
+        "_make_config",
+        "test_single_bundle_reaches_terminal_state",
+        "test_curation_flags_empty_masks",
+        "test_curation_caption_memoized"
+      ],
+      "totalLines": 89,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_geometry.py": {
+      "filePath": "tests/test_geometry.py",
+      "contentHash": "516eb8b43e89e48f45944fd7fa93f48bacf4918b1abe69876c73833d9be840e7",
+      "functions": [
+        {
+          "name": "test_compute_area",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_compute_iou",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_bbox_iou",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_summarize_masks",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 28
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.core.models",
+          "specifiers": [
+            "MaskRecord"
+          ]
+        },
+        {
+          "source": "src.tools.geometry",
+          "specifiers": [
+            "bbox_iou",
+            "compute_area",
+            "compute_iou",
+            "summarize_masks"
+          ]
+        }
+      ],
+      "exports": [
+        "test_compute_area",
+        "test_compute_iou",
+        "test_bbox_iou",
+        "test_summarize_masks"
+      ],
+      "totalLines": 51,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_gui.py": {
+      "filePath": "tests/test_gui.py",
+      "contentHash": "04450c470976248e2ebaaa6d101794b4e5f09aa09319aa7ba707dd913d72844f",
+      "functions": [
+        {
+          "name": "root",
+          "params": [],
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "gui",
+          "params": [
+            "root"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_color_for_consistent",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_attach_tooltip_no_crash",
+          "params": [
+            "root"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "test_load_save_json_roundtrip",
+          "params": [
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_load_json_missing_returns_empty",
+          "params": [
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "test_gui_builds",
+          "params": [
+            "gui"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "test_theme_toggle",
+          "params": [
+            "gui"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "test_hotkey_bindings_present",
+          "params": [
+            "gui"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_menu_bar_present",
+          "params": [
+            "gui"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_queue_handler_emits",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "test_queue_handler_bounded",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "labeler",
+          "params": [
+            "root"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_labeler_builds",
+          "params": [
+            "labeler"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_labeler_mode_switching",
+          "params": [
+            "labeler"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_labeler_add_class",
+          "params": [
+            "labeler"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_shape_labelme_roundtrip",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "test_shape_rectangle_labelme",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_labeler_load_image_and_save_json",
+          "params": [
+            "labeler",
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "test_labeler_undo",
+          "params": [
+            "labeler",
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "test_labeler_delete_shape",
+          "params": [
+            "labeler",
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "test_labeler_zoom_clamping",
+          "params": [
+            "labeler",
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "test_labeler_load_existing_json",
+          "params": [
+            "labeler",
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "test_labeler_load_image_navigation",
+          "params": [
+            "labeler",
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "test_labeler_coord_roundtrip",
+          "params": [
+            "labeler",
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "test_labeler_finish_polygon_needs_3pts",
+          "params": [
+            "labeler",
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "test_results_filter_combobox_options",
+          "params": [
+            "gui"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_save_settings_writes_file",
+          "params": [
+            "gui",
+            "tmp_path",
+            "monkeypatch"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "test_polygon_classes_in_color_map",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "tkinter",
+          "specifiers": [
+            "tk"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "PIL",
+          "specifiers": [
+            "Image"
+          ]
+        },
+        {
+          "source": "src.ui._helpers",
+          "specifiers": [
+            "attach_tooltip",
+            "color_for",
+            "load_json",
+            "save_json"
+          ]
+        },
+        {
+          "source": "src.ui.labeler",
+          "specifiers": [
+            "LabelerPanel",
+            "_Shape"
+          ]
+        },
+        {
+          "source": "src.ui.review_app",
+          "specifiers": [
+            "AnnotatorGUI",
+            "_QueueHandler"
+          ]
+        }
+      ],
+      "exports": [
+        "root",
+        "gui",
+        "test_color_for_consistent",
+        "test_attach_tooltip_no_crash",
+        "test_load_save_json_roundtrip",
+        "test_load_json_missing_returns_empty",
+        "test_gui_builds",
+        "test_theme_toggle",
+        "test_hotkey_bindings_present",
+        "test_menu_bar_present",
+        "test_queue_handler_emits",
+        "test_queue_handler_bounded",
+        "labeler",
+        "test_labeler_builds",
+        "test_labeler_mode_switching",
+        "test_labeler_add_class",
+        "test_shape_labelme_roundtrip",
+        "test_shape_rectangle_labelme",
+        "test_labeler_load_image_and_save_json",
+        "test_labeler_undo",
+        "test_labeler_delete_shape",
+        "test_labeler_zoom_clamping",
+        "test_labeler_load_existing_json",
+        "test_labeler_load_image_navigation",
+        "test_labeler_coord_roundtrip",
+        "test_labeler_finish_polygon_needs_3pts",
+        "test_results_filter_combobox_options",
+        "test_save_settings_writes_file",
+        "test_polygon_classes_in_color_map"
+      ],
+      "totalLines": 336,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_orchestrator.py": {
+      "filePath": "tests/test_orchestrator.py",
+      "contentHash": "cd1d2eddc9a9d102a9bb3fe21216d6480c3046c06d03f939acbf045e72df9b4c",
+      "functions": [
+        {
+          "name": "test_read_image_size_jpg",
+          "params": [
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_read_image_size_png",
+          "params": [
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_discover_images_uses_real_dims",
+          "params": [
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "test_config_loader_rejects_empty_label_schema",
+          "params": [
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "test_orchestrator_end_to_end",
+          "params": [
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 27
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "PIL",
+          "specifiers": [
+            "Image"
+          ]
+        },
+        {
+          "source": "src.core.config_loader",
+          "specifiers": [
+            "load_project_config"
+          ]
+        },
+        {
+          "source": "src.core.orchestrator",
+          "specifiers": [
+            "_read_image_size",
+            "discover_images",
+            "run_orchestrator"
+          ]
+        }
+      ],
+      "exports": [
+        "test_read_image_size_jpg",
+        "test_read_image_size_png",
+        "test_discover_images_uses_real_dims",
+        "test_config_loader_rejects_empty_label_schema",
+        "test_orchestrator_end_to_end"
+      ],
+      "totalLines": 75,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_prompt_interpreter.py": {
+      "filePath": "tests/test_prompt_interpreter.py",
+      "contentHash": "8c85386aa6fac34e9cc4b1ee5afb674aae61906811b828e1e09365146da33cc6",
+      "functions": [
+        {
+          "name": "test_basic_extraction",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_synonyms",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_bigram_traffic_light",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_empty_falls_back",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_unknown_tokens_used_as_raw_classes",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_per_class_prompt_built",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "src.tools.prompt_interpreter",
+          "specifiers": [
+            "interpret_prompt"
+          ]
+        }
+      ],
+      "exports": [
+        "test_basic_extraction",
+        "test_synonyms",
+        "test_bigram_traffic_light",
+        "test_empty_falls_back",
+        "test_unknown_tokens_used_as_raw_classes",
+        "test_per_class_prompt_built"
+      ],
+      "totalLines": 38,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_sam3_client.py": {
+      "filePath": "tests/test_sam3_client.py",
+      "contentHash": "a5509236069ecd890723bbaf4e358f66c1043d9da119e3976df55da958e10949",
+      "functions": [
+        {
+          "name": "test_sam3_segment_text_prompt_deterministic",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "test_sam3_segment_exemplar_prompt",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_seed_is_stable_across_processes",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "test_sam3_segment_text_prompt_api_backend",
+          "params": [
+            "tmp_path",
+            "monkeypatch"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 34
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "subprocess",
+          "specifiers": [
+            "subprocess"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "src.tools.sam3.client",
+          "specifiers": [
+            "_seed_from"
+          ]
+        },
+        {
+          "source": "src.tools.sam3",
+          "specifiers": [
+            "sam3_segment_exemplar_prompt",
+            "sam3_segment_text_prompt"
+          ]
+        }
+      ],
+      "exports": [
+        "test_sam3_segment_text_prompt_deterministic",
+        "test_sam3_segment_exemplar_prompt",
+        "test_seed_is_stable_across_processes",
+        "test_sam3_segment_text_prompt_api_backend"
+      ],
+      "totalLines": 69,
+      "hasStructuralAnalysis": true
+    }
+  }
+}

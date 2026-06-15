@@ -1,0 +1,4431 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "agentic-sam3-annotator",
+    "languages": [
+      "ipynb",
+      "markdown",
+      "python",
+      "toml",
+      "unknown",
+      "yaml"
+    ],
+    "frameworks": [
+      "pydantic",
+      "pytest",
+      "transformers",
+      "accelerate",
+      "torch"
+    ],
+    "description": "Agentic SAM3 auto-annotation lab with multi-agent QA and exporters.",
+    "analyzedAt": "2026-05-30T12:57:38.877Z",
+    "gitCommitHash": "b5b205011260023b98f4ac06ef14dcc5f6617033"
+  },
+  "nodes": [
+    {
+      "id": "file:src/agents/base_agent.py",
+      "type": "file",
+      "name": "base_agent.py",
+      "filePath": "src/agents/base_agent.py",
+      "summary": "Abstract base class defining the agent contract for multi-agent annotation conversations, requiring should_respond and respond methods.",
+      "tags": [
+        "agent",
+        "base-class",
+        "conversation",
+        "abstraction"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Uses ABC pattern with abstract respond method for polymorphic agent dispatch."
+    },
+    {
+      "id": "class:src/agents/base_agent.py:BaseAgent",
+      "type": "class",
+      "name": "BaseAgent",
+      "filePath": "src/agents/base_agent.py",
+      "lineRange": [
+        8,
+        20
+      ],
+      "summary": "Abstract agent base storing a name and defining the should_respond/respond interface used by the orchestrator conversation loop.",
+      "tags": [
+        "agent",
+        "base-class",
+        "abstraction",
+        "conversation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/agents/coordinator_agent.py",
+      "type": "file",
+      "name": "coordinator_agent.py",
+      "filePath": "src/agents/coordinator_agent.py",
+      "summary": "Coordinator agent that drives the annotation workflow by routing actions between SAM3 segmentation and curation QA stages based on bundle state.",
+      "tags": [
+        "agent",
+        "coordinator",
+        "workflow",
+        "conversation",
+        "tested"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src/agents/coordinator_agent.py:CoordinatorAgent",
+      "type": "class",
+      "name": "CoordinatorAgent",
+      "filePath": "src/agents/coordinator_agent.py",
+      "lineRange": [
+        9,
+        129
+      ],
+      "summary": "Workflow coordinator extending BaseAgent; emits ConversationMessage actions to trigger annotation, QA, retry, or terminal states per image bundle.",
+      "tags": [
+        "agent",
+        "coordinator",
+        "workflow",
+        "state-machine"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/agents/curation_agent.py",
+      "type": "file",
+      "name": "curation_agent.py",
+      "filePath": "src/agents/curation_agent.py",
+      "summary": "Quality-assurance agent that validates mask annotations, runs geometry checks, optionally captions images, and produces QAResult decisions.",
+      "tags": [
+        "agent",
+        "qa",
+        "curation",
+        "validation",
+        "tested"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src/agents/curation_agent.py:CurationAgent",
+      "type": "class",
+      "name": "CurationAgent",
+      "filePath": "src/agents/curation_agent.py",
+      "lineRange": [
+        12,
+        149
+      ],
+      "summary": "QA agent performing mask quality checks (area, overlap, class balance), optional caption verification, and emitting structured QAResult actions.",
+      "tags": [
+        "agent",
+        "qa",
+        "validation",
+        "geometry"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/agents/sam3_agent.py",
+      "type": "file",
+      "name": "sam3_agent.py",
+      "filePath": "src/agents/sam3_agent.py",
+      "summary": "SAM3 segmentation agent that responds to annotate actions by invoking text or exemplar prompts and returning generated MaskRecord payloads.",
+      "tags": [
+        "agent",
+        "sam3",
+        "segmentation",
+        "annotation",
+        "tested"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src/agents/sam3_agent.py:SAM3Agent",
+      "type": "class",
+      "name": "SAM3Agent",
+      "filePath": "src/agents/sam3_agent.py",
+      "lineRange": [
+        10,
+        94
+      ],
+      "summary": "Segmentation agent wrapping SAM3 text and exemplar prompt APIs to produce MaskRecord instances from coordinator annotate requests.",
+      "tags": [
+        "agent",
+        "sam3",
+        "segmentation",
+        "mask-generation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/core/models.py",
+      "type": "file",
+      "name": "models.py",
+      "filePath": "src/core/models.py",
+      "summary": "Pydantic data models for project configuration, image/mask records, QA results, conversation messages, and annotation bundles shared across agents.",
+      "tags": [
+        "data-model",
+        "pydantic",
+        "core",
+        "type-definition"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Pydantic BaseModel classes with model_dump serialization used throughout the agent pipeline."
+    },
+    {
+      "id": "class:src/core/models.py:ProjectConfig",
+      "type": "class",
+      "name": "ProjectConfig",
+      "filePath": "src/core/models.py",
+      "lineRange": [
+        26,
+        46
+      ],
+      "summary": "Central configuration model holding dataset paths, label schema, SAM3/LLM settings, QA thresholds, and export options for the annotation pipeline.",
+      "tags": [
+        "data-model",
+        "configuration",
+        "pydantic",
+        "core"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src/core/models.py:ImageRecord",
+      "type": "class",
+      "name": "ImageRecord",
+      "filePath": "src/core/models.py",
+      "lineRange": [
+        49,
+        58
+      ],
+      "summary": "Represents a discovered dataset image with dimensions, path, and metadata used as the anchor for per-image annotation bundles.",
+      "tags": [
+        "data-model",
+        "image",
+        "dataset",
+        "pydantic"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src/core/models.py:MaskRecord",
+      "type": "class",
+      "name": "MaskRecord",
+      "filePath": "src/core/models.py",
+      "lineRange": [
+        61,
+        70
+      ],
+      "summary": "Stores a single segmentation mask with polygon, bounding box, class ID, confidence, and provenance metadata.",
+      "tags": [
+        "data-model",
+        "mask",
+        "annotation",
+        "pydantic"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src/core/models.py:QAResult",
+      "type": "class",
+      "name": "QAResult",
+      "filePath": "src/core/models.py",
+      "lineRange": [
+        73,
+        78
+      ],
+      "summary": "Quality-assurance outcome capturing score, issue list, retry/accept decision, and per-class refinement hints for an image.",
+      "tags": [
+        "data-model",
+        "qa",
+        "validation",
+        "pydantic"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src/core/models.py:ConversationMessage",
+      "type": "class",
+      "name": "ConversationMessage",
+      "filePath": "src/core/models.py",
+      "lineRange": [
+        81,
+        88
+      ],
+      "summary": "Inter-agent message with sender, role, content, and structured actions that drive the multi-turn annotation conversation.",
+      "tags": [
+        "data-model",
+        "conversation",
+        "messaging",
+        "pydantic"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src/core/models.py:AnnotationBundle",
+      "type": "class",
+      "name": "AnnotationBundle",
+      "filePath": "src/core/models.py",
+      "lineRange": [
+        91,
+        97
+      ],
+      "summary": "Aggregate state for one image combining masks, QA result, conversation history, retry count, and processing status.",
+      "tags": [
+        "data-model",
+        "bundle",
+        "annotation",
+        "state"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/core/orchestrator.py",
+      "type": "file",
+      "name": "orchestrator.py",
+      "filePath": "src/core/orchestrator.py",
+      "summary": "Main pipeline orchestrator that discovers images, runs multi-agent conversations per bundle in parallel, exports YOLO labels, and writes QA/conversation logs.",
+      "tags": [
+        "orchestrator",
+        "entry-point",
+        "pipeline",
+        "parallel",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Uses ThreadPoolExecutor for parallel image discovery and bundle processing with cancellation support."
+    },
+    {
+      "id": "function:src/core/orchestrator.py:_read_image_size",
+      "type": "function",
+      "name": "_read_image_size",
+      "filePath": "src/core/orchestrator.py",
+      "lineRange": [
+        31,
+        71
+      ],
+      "summary": "Reads image width and height from JPEG/PNG files using Pillow with a struct-based fallback parser for header-only reads.",
+      "tags": [
+        "utility",
+        "image-io",
+        "metadata"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/core/orchestrator.py:discover_images",
+      "type": "function",
+      "name": "discover_images",
+      "filePath": "src/core/orchestrator.py",
+      "lineRange": [
+        83,
+        104
+      ],
+      "summary": "Scans a dataset directory recursively and builds ImageRecord instances with parallel dimension probing.",
+      "tags": [
+        "dataset",
+        "discovery",
+        "parallel",
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/core/orchestrator.py:_apply_actions",
+      "type": "function",
+      "name": "_apply_actions",
+      "filePath": "src/core/orchestrator.py",
+      "lineRange": [
+        111,
+        127
+      ],
+      "summary": "Mutates an AnnotationBundle by applying mask, QA, and status actions from a ConversationMessage payload.",
+      "tags": [
+        "utility",
+        "state-mutation",
+        "conversation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/core/orchestrator.py:run_bundle_conversation",
+      "type": "function",
+      "name": "run_bundle_conversation",
+      "filePath": "src/core/orchestrator.py",
+      "lineRange": [
+        134,
+        181
+      ],
+      "summary": "Runs the multi-turn coordinator-SAM3-curation conversation loop for a single annotation bundle until a terminal action is reached.",
+      "tags": [
+        "orchestrator",
+        "conversation",
+        "workflow",
+        "core"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/core/orchestrator.py:_slim_message",
+      "type": "function",
+      "name": "_slim_message",
+      "filePath": "src/core/orchestrator.py",
+      "lineRange": [
+        184,
+        198
+      ],
+      "summary": "Strips verbose action payloads from conversation message dicts to produce compact log entries.",
+      "tags": [
+        "utility",
+        "serialization",
+        "logging"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/core/orchestrator.py:_export_conversation_logs",
+      "type": "function",
+      "name": "_export_conversation_logs",
+      "filePath": "src/core/orchestrator.py",
+      "lineRange": [
+        201,
+        232
+      ],
+      "summary": "Writes per-image conversation histories and QA snapshots to JSON log files under the output directory.",
+      "tags": [
+        "export",
+        "logging",
+        "serialization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/core/orchestrator.py:_export_qa_report",
+      "type": "function",
+      "name": "_export_qa_report",
+      "filePath": "src/core/orchestrator.py",
+      "lineRange": [
+        246,
+        292
+      ],
+      "summary": "Aggregates QA statistics across all bundles and writes a summary report with class counts, issue frequencies, and human-review IDs.",
+      "tags": [
+        "export",
+        "qa",
+        "reporting",
+        "aggregation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/core/orchestrator.py:run_orchestrator",
+      "type": "function",
+      "name": "run_orchestrator",
+      "filePath": "src/core/orchestrator.py",
+      "lineRange": [
+        295,
+        361
+      ],
+      "summary": "Top-level pipeline entry that wires agents, processes all image bundles in parallel, exports YOLO dataset, and writes logs and QA reports.",
+      "tags": [
+        "entry-point",
+        "orchestrator",
+        "pipeline",
+        "parallel"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:src/tools/captioning.py",
+      "type": "file",
+      "name": "captioning.py",
+      "filePath": "src/tools/captioning.py",
+      "summary": "Stub captioning utility that derives a placeholder caption from the image filename stem for QA caption-consistency checks.",
+      "tags": [
+        "utility",
+        "captioning",
+        "stub",
+        "qa"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/tools/geometry.py",
+      "type": "file",
+      "name": "geometry.py",
+      "filePath": "src/tools/geometry.py",
+      "summary": "Mask geometry helpers for area, IoU, bounding-box overlap, and mask summarization used by the curation QA agent.",
+      "tags": [
+        "utility",
+        "geometry",
+        "iou",
+        "validation",
+        "tested"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/tools/geometry.py:compute_iou",
+      "type": "function",
+      "name": "compute_iou",
+      "filePath": "src/tools/geometry.py",
+      "lineRange": [
+        17,
+        27
+      ],
+      "summary": "Computes intersection-over-union between two binary mask arrays using numpy logical operations.",
+      "tags": [
+        "geometry",
+        "iou",
+        "utility",
+        "numpy"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/tools/geometry.py:bbox_iou",
+      "type": "function",
+      "name": "bbox_iou",
+      "filePath": "src/tools/geometry.py",
+      "lineRange": [
+        30,
+        53
+      ],
+      "summary": "Calculates axis-aligned bounding box IoU from two [x1,y1,x2,y2] coordinate tuples.",
+      "tags": [
+        "geometry",
+        "iou",
+        "bbox",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/tools/geometry.py:summarize_masks",
+      "type": "function",
+      "name": "summarize_masks",
+      "filePath": "src/tools/geometry.py",
+      "lineRange": [
+        56,
+        66
+      ],
+      "summary": "Aggregates mask statistics including count, per-class distribution, and mean area/confidence for QA reporting.",
+      "tags": [
+        "geometry",
+        "aggregation",
+        "utility",
+        "qa"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/tools/geometry.py:pairwise_bbox_iou",
+      "type": "function",
+      "name": "pairwise_bbox_iou",
+      "filePath": "src/tools/geometry.py",
+      "lineRange": [
+        69,
+        83
+      ],
+      "summary": "Finds the maximum pairwise bounding-box IoU across all masks in a list to detect overlapping detections.",
+      "tags": [
+        "geometry",
+        "iou",
+        "overlap-detection",
+        "qa"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/test_agents.py",
+      "type": "file",
+      "name": "test_agents.py",
+      "filePath": "tests/test_agents.py",
+      "summary": "Integration tests verifying multi-agent conversation flow, curation empty-mask detection, and caption memoization behavior.",
+      "tags": [
+        "test",
+        "agents",
+        "integration",
+        "qa"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:tests/test_agents.py:_make_config",
+      "type": "function",
+      "name": "_make_config",
+      "filePath": "tests/test_agents.py",
+      "lineRange": [
+        10,
+        26
+      ],
+      "summary": "Test helper factory that builds a ProjectConfig with sensible defaults and optional field overrides.",
+      "tags": [
+        "test",
+        "factory",
+        "helper",
+        "configuration"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_agents.py:test_single_bundle_reaches_terminal_state",
+      "type": "function",
+      "name": "test_single_bundle_reaches_terminal_state",
+      "filePath": "tests/test_agents.py",
+      "lineRange": [
+        29,
+        46
+      ],
+      "summary": "Verifies a full coordinator-SAM3-curation conversation loop terminates with a non-empty history for a single bundle.",
+      "tags": [
+        "test",
+        "integration",
+        "conversation",
+        "workflow"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_agents.py:test_curation_flags_empty_masks",
+      "type": "function",
+      "name": "test_curation_flags_empty_masks",
+      "filePath": "tests/test_agents.py",
+      "lineRange": [
+        49,
+        63
+      ],
+      "summary": "Asserts CurationAgent quality checks flag bundles with zero masks as having an empty-annotation issue.",
+      "tags": [
+        "test",
+        "qa",
+        "curation",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_agents.py:test_curation_caption_memoized",
+      "type": "function",
+      "name": "test_curation_caption_memoized",
+      "filePath": "tests/test_agents.py",
+      "lineRange": [
+        66,
+        88
+      ],
+      "summary": "Confirms the curation agent caches caption results so repeated respond calls invoke the caption function only once.",
+      "tags": [
+        "test",
+        "curation",
+        "caching",
+        "captioning"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/test_geometry.py",
+      "type": "file",
+      "name": "test_geometry.py",
+      "filePath": "tests/test_geometry.py",
+      "summary": "Unit tests for mask geometry utilities covering area, IoU, bounding-box overlap, and mask summarization.",
+      "tags": [
+        "test",
+        "geometry",
+        "unit-test",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_geometry.py:test_summarize_masks",
+      "type": "function",
+      "name": "test_summarize_masks",
+      "filePath": "tests/test_geometry.py",
+      "lineRange": [
+        23,
+        50
+      ],
+      "summary": "Validates summarize_masks returns correct count, class distribution, and mean area/confidence for sample MaskRecord instances.",
+      "tags": [
+        "test",
+        "geometry",
+        "aggregation",
+        "unit-test"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/core/config_loader.py",
+      "type": "file",
+      "name": "config_loader.py",
+      "filePath": "src/core/config_loader.py",
+      "summary": "Loads YAML project configuration into a typed ProjectConfig model, validating required sections and label schema.",
+      "tags": [
+        "config",
+        "yaml",
+        "validation",
+        "service",
+        "tested"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/core/logging_utils.py",
+      "type": "file",
+      "name": "logging_utils.py",
+      "filePath": "src/core/logging_utils.py",
+      "summary": "Configures dual file and stream logging handlers with a shared formatter for pipeline runs.",
+      "tags": [
+        "logging",
+        "utility",
+        "service"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/main.py",
+      "type": "file",
+      "name": "main.py",
+      "filePath": "src/main.py",
+      "summary": "CLI entry point that parses arguments, loads config, interprets user prompts, and runs the annotation orchestrator.",
+      "tags": [
+        "entry-point",
+        "cli",
+        "pipeline"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/tools/prompt_interpreter.py",
+      "type": "file",
+      "name": "prompt_interpreter.py",
+      "filePath": "src/tools/prompt_interpreter.py",
+      "summary": "Rule-based parser that converts free-text annotation prompts into class lists and per-class SAM3 prompts via synonym expansion.",
+      "tags": [
+        "nlp",
+        "utility",
+        "prompt-parsing",
+        "tested"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Designed as a swappable Phase 1 rule engine before optional LLM integration."
+    },
+    {
+      "id": "file:src/ui/_helpers.py",
+      "type": "file",
+      "name": "_helpers.py",
+      "filePath": "src/ui/_helpers.py",
+      "summary": "Shared Tkinter GUI utilities for path resolution, JSON I/O, color mapping, explorer launch, and tooltips.",
+      "tags": [
+        "utility",
+        "gui",
+        "tkinter",
+        "tested"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/core/config_loader.py:_require_mapping",
+      "type": "function",
+      "name": "_require_mapping",
+      "filePath": "src/core/config_loader.py",
+      "lineRange": [
+        11,
+        15
+      ],
+      "summary": "Validates that a config key holds a mapping dict, raising ValueError otherwise.",
+      "tags": [
+        "validation",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/core/config_loader.py:load_project_config",
+      "type": "function",
+      "name": "load_project_config",
+      "filePath": "src/core/config_loader.py",
+      "lineRange": [
+        18,
+        62
+      ],
+      "summary": "Reads YAML config file and constructs ProjectConfig with SAM3, QA, LLM, and human-review settings.",
+      "tags": [
+        "config",
+        "loader",
+        "service"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/core/logging_utils.py:setup_logging",
+      "type": "function",
+      "name": "setup_logging",
+      "filePath": "src/core/logging_utils.py",
+      "lineRange": [
+        7,
+        30
+      ],
+      "summary": "Initializes root logger with file and console handlers under the given log directory.",
+      "tags": [
+        "logging",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/main.py:parse_args",
+      "type": "function",
+      "name": "parse_args",
+      "filePath": "src/main.py",
+      "lineRange": [
+        13,
+        46
+      ],
+      "summary": "Defines CLI argument parser for config path, dataset overrides, prompt input, and dry-run mode.",
+      "tags": [
+        "cli",
+        "argparse"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/main.py:_apply_overrides",
+      "type": "function",
+      "name": "_apply_overrides",
+      "filePath": "src/main.py",
+      "lineRange": [
+        49,
+        58
+      ],
+      "summary": "Applies CLI overrides for dataset, output, workers, and max retries onto the loaded config.",
+      "tags": [
+        "cli",
+        "config"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/main.py:_apply_prompt",
+      "type": "function",
+      "name": "_apply_prompt",
+      "filePath": "src/main.py",
+      "lineRange": [
+        61,
+        81
+      ],
+      "summary": "Reads interactive or CLI prompt text and updates config label schema via interpret_prompt.",
+      "tags": [
+        "cli",
+        "prompt-parsing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/main.py:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "src/main.py",
+      "lineRange": [
+        84,
+        119
+      ],
+      "summary": "Orchestrates the full CLI pipeline: load config, setup logging, discover images, and run agents.",
+      "tags": [
+        "entry-point",
+        "pipeline"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/tools/prompt_interpreter.py:_canonical_for",
+      "type": "function",
+      "name": "_canonical_for",
+      "filePath": "src/tools/prompt_interpreter.py",
+      "lineRange": [
+        74,
+        86
+      ],
+      "summary": "Maps a token to its canonical class name using synonym lookup and simple plural stemming.",
+      "tags": [
+        "nlp",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/tools/prompt_interpreter.py:interpret_prompt",
+      "type": "function",
+      "name": "interpret_prompt",
+      "filePath": "src/tools/prompt_interpreter.py",
+      "lineRange": [
+        89,
+        155
+      ],
+      "summary": "Extracts annotation classes from free text, expands synonyms, fuzzy-matches tokens, and builds per-class prompts.",
+      "tags": [
+        "nlp",
+        "prompt-parsing",
+        "service"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src/tools/prompt_interpreter.py:PromptPlan",
+      "type": "class",
+      "name": "PromptPlan",
+      "filePath": "src/tools/prompt_interpreter.py",
+      "lineRange": [
+        60,
+        64
+      ],
+      "summary": "Dataclass holding parsed classes, per-class prompts, raw input, and parsing notes.",
+      "tags": [
+        "data-model",
+        "type-definition"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/_helpers.py:project_root",
+      "type": "function",
+      "name": "project_root",
+      "filePath": "src/ui/_helpers.py",
+      "lineRange": [
+        21,
+        23
+      ],
+      "summary": "Resolves project root directory relative to the UI helpers module location.",
+      "tags": [
+        "utility",
+        "path"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/_helpers.py:resolve_path",
+      "type": "function",
+      "name": "resolve_path",
+      "filePath": "src/ui/_helpers.py",
+      "lineRange": [
+        26,
+        31
+      ],
+      "summary": "Resolves relative paths against project root when the path does not exist as given.",
+      "tags": [
+        "utility",
+        "path"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/_helpers.py:color_for",
+      "type": "function",
+      "name": "color_for",
+      "filePath": "src/ui/_helpers.py",
+      "lineRange": [
+        34,
+        35
+      ],
+      "summary": "Returns a stable palette color for a given class name via hash modulo.",
+      "tags": [
+        "utility",
+        "visualization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/_helpers.py:load_json",
+      "type": "function",
+      "name": "load_json",
+      "filePath": "src/ui/_helpers.py",
+      "lineRange": [
+        38,
+        42
+      ],
+      "summary": "Safely loads JSON from disk, returning empty dict on failure.",
+      "tags": [
+        "utility",
+        "serialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/_helpers.py:save_json",
+      "type": "function",
+      "name": "save_json",
+      "filePath": "src/ui/_helpers.py",
+      "lineRange": [
+        45,
+        49
+      ],
+      "summary": "Writes JSON data to disk with indentation, silently ignoring write errors.",
+      "tags": [
+        "utility",
+        "serialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/_helpers.py:open_in_explorer",
+      "type": "function",
+      "name": "open_in_explorer",
+      "filePath": "src/ui/_helpers.py",
+      "lineRange": [
+        52,
+        61
+      ],
+      "summary": "Opens a file or folder in the OS file manager across Windows, macOS, and Linux.",
+      "tags": [
+        "utility",
+        "os"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/_helpers.py:attach_tooltip",
+      "type": "function",
+      "name": "attach_tooltip",
+      "filePath": "src/ui/_helpers.py",
+      "lineRange": [
+        64,
+        90
+      ],
+      "summary": "Binds hover enter/leave handlers to show a transient tooltip window on a Tk widget.",
+      "tags": [
+        "utility",
+        "gui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/ui/labeler.py",
+      "type": "file",
+      "name": "labeler.py",
+      "filePath": "src/ui/labeler.py",
+      "summary": "LabelMe-compatible manual annotation panel with rectangle/polygon drawing, undo, zoom, and JSON export.",
+      "tags": [
+        "component",
+        "gui",
+        "annotation",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Large Tkinter canvas widget with LabelMe JSON serialization and optional SAM3 auto-annotate hook."
+    },
+    {
+      "id": "file:src/ui/review_app.py",
+      "type": "file",
+      "name": "review_app.py",
+      "filePath": "src/ui/review_app.py",
+      "summary": "Main Tkinter review application with setup, labeler, log, and results tabs; runs the orchestrator in a background thread.",
+      "tags": [
+        "entry-point",
+        "gui",
+        "component",
+        "tested"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/test_gui.py",
+      "type": "file",
+      "name": "test_gui.py",
+      "filePath": "tests/test_gui.py",
+      "summary": "Pytest suite exercising GUI helpers, AnnotatorGUI construction, theme/hotkeys, queue logging, and LabelerPanel interactions.",
+      "tags": [
+        "test",
+        "gui",
+        "pytest"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/test_orchestrator.py",
+      "type": "file",
+      "name": "test_orchestrator.py",
+      "filePath": "tests/test_orchestrator.py",
+      "summary": "Integration tests for image discovery, config validation, and end-to-end orchestrator runs on synthetic images.",
+      "tags": [
+        "test",
+        "integration",
+        "orchestrator"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/test_prompt_interpreter.py",
+      "type": "file",
+      "name": "test_prompt_interpreter.py",
+      "filePath": "tests/test_prompt_interpreter.py",
+      "summary": "Unit tests for prompt parsing, synonym mapping, bigram handling, and per-class prompt generation.",
+      "tags": [
+        "test",
+        "unit",
+        "prompt-parsing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src/ui/labeler.py:_Shape",
+      "type": "class",
+      "name": "_Shape",
+      "filePath": "src/ui/labeler.py",
+      "lineRange": [
+        32,
+        56
+      ],
+      "summary": "Internal shape model supporting rectangle and polygon annotations with LabelMe JSON conversion.",
+      "tags": [
+        "data-model",
+        "annotation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src/ui/labeler.py:LabelerPanel",
+      "type": "class",
+      "name": "LabelerPanel",
+      "filePath": "src/ui/labeler.py",
+      "lineRange": [
+        59,
+        828
+      ],
+      "summary": "Full LabelMe-style annotator widget with drawing modes, undo, file navigation, zoom, and save.",
+      "tags": [
+        "component",
+        "gui",
+        "annotation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src/ui/review_app.py:_load_recent",
+      "type": "function",
+      "name": "_load_recent",
+      "filePath": "src/ui/review_app.py",
+      "lineRange": [
+        64,
+        68
+      ],
+      "summary": "Loads recent file paths from the user home recent-list JSON file.",
+      "tags": [
+        "utility",
+        "persistence"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/review_app.py:_save_recent",
+      "type": "function",
+      "name": "_save_recent",
+      "filePath": "src/ui/review_app.py",
+      "lineRange": [
+        71,
+        72
+      ],
+      "summary": "Persists up to eight recent file paths to the user home recent-list JSON file.",
+      "tags": [
+        "utility",
+        "persistence"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/review_app.py:_install_safety_guards",
+      "type": "function",
+      "name": "_install_safety_guards",
+      "filePath": "src/ui/review_app.py",
+      "lineRange": [
+        1017,
+        1024
+      ],
+      "summary": "Installs Tk after/callback guards to prevent crashes from stale widget references.",
+      "tags": [
+        "utility",
+        "gui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/review_app.py:_install_tk_error_handler",
+      "type": "function",
+      "name": "_install_tk_error_handler",
+      "filePath": "src/ui/review_app.py",
+      "lineRange": [
+        1027,
+        1042
+      ],
+      "summary": "Replaces Tk report_callback_exception to log GUI errors instead of silent failure.",
+      "tags": [
+        "utility",
+        "gui",
+        "event-handler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/ui/review_app.py:launch_review_app",
+      "type": "function",
+      "name": "launch_review_app",
+      "filePath": "src/ui/review_app.py",
+      "lineRange": [
+        1045,
+        1051
+      ],
+      "summary": "Creates Tk root, instantiates AnnotatorGUI, and starts the main event loop.",
+      "tags": [
+        "entry-point",
+        "gui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src/ui/review_app.py:_QueueHandler",
+      "type": "class",
+      "name": "_QueueHandler",
+      "filePath": "src/ui/review_app.py",
+      "lineRange": [
+        75,
+        96
+      ],
+      "summary": "Logging handler that enqueues formatted log records tagged by agent name for GUI display.",
+      "tags": [
+        "logging",
+        "event-handler",
+        "gui"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src/ui/review_app.py:AnnotatorGUI",
+      "type": "class",
+      "name": "AnnotatorGUI",
+      "filePath": "src/ui/review_app.py",
+      "lineRange": [
+        99,
+        1014
+      ],
+      "summary": "Main application window managing tabs, pipeline execution, preview canvas, settings, and theme toggling.",
+      "tags": [
+        "component",
+        "gui",
+        "entry-point"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:tests/test_gui.py:root",
+      "type": "function",
+      "name": "root",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        22,
+        32
+      ],
+      "summary": "Pytest fixture providing a hidden Tk root window for GUI tests.",
+      "tags": [
+        "test",
+        "fixture",
+        "gui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_queue_handler_emits",
+      "type": "function",
+      "name": "test_queue_handler_emits",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        96,
+        109
+      ],
+      "summary": "Verifies _QueueHandler enqueues log records with agent tags into a bounded queue.",
+      "tags": [
+        "test",
+        "logging",
+        "gui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_queue_handler_bounded",
+      "type": "function",
+      "name": "test_queue_handler_bounded",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        112,
+        122
+      ],
+      "summary": "Ensures queue handler drops oldest entries when the log queue is full.",
+      "tags": [
+        "test",
+        "logging",
+        "gui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_labeler_load_image_and_save_json",
+      "type": "function",
+      "name": "test_labeler_load_image_and_save_json",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        170,
+        188
+      ],
+      "summary": "Tests LabelerPanel loading an image, adding a rectangle shape, and saving LabelMe JSON.",
+      "tags": [
+        "test",
+        "labeler",
+        "integration"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_labeler_undo",
+      "type": "function",
+      "name": "test_labeler_undo",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        191,
+        202
+      ],
+      "summary": "Verifies undo restores prior shape state after adding annotations.",
+      "tags": [
+        "test",
+        "labeler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_labeler_delete_shape",
+      "type": "function",
+      "name": "test_labeler_delete_shape",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        205,
+        216
+      ],
+      "summary": "Tests deleting a selected shape from the labeler panel.",
+      "tags": [
+        "test",
+        "labeler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_labeler_zoom_clamping",
+      "type": "function",
+      "name": "test_labeler_zoom_clamping",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        219,
+        231
+      ],
+      "summary": "Checks zoom level stays within configured min/max bounds.",
+      "tags": [
+        "test",
+        "labeler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_labeler_load_existing_json",
+      "type": "function",
+      "name": "test_labeler_load_existing_json",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        234,
+        258
+      ],
+      "summary": "Loads pre-existing LabelMe JSON and verifies shapes and classes populate correctly.",
+      "tags": [
+        "test",
+        "labeler",
+        "serialization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_labeler_load_image_navigation",
+      "type": "function",
+      "name": "test_labeler_load_image_navigation",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        261,
+        274
+      ],
+      "summary": "Tests next/prev image navigation updates canvas and file list selection.",
+      "tags": [
+        "test",
+        "labeler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_labeler_coord_roundtrip",
+      "type": "function",
+      "name": "test_labeler_coord_roundtrip",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        277,
+        288
+      ],
+      "summary": "Verifies image-to-canvas and canvas-to-image coordinate transforms are consistent.",
+      "tags": [
+        "test",
+        "labeler",
+        "geometry"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_labeler_finish_polygon_needs_3pts",
+      "type": "function",
+      "name": "test_labeler_finish_polygon_needs_3pts",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        291,
+        306
+      ],
+      "summary": "Ensures polygon completion requires at least three vertices.",
+      "tags": [
+        "test",
+        "labeler",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_gui.py:test_save_settings_writes_file",
+      "type": "function",
+      "name": "test_save_settings_writes_file",
+      "filePath": "tests/test_gui.py",
+      "lineRange": [
+        315,
+        328
+      ],
+      "summary": "Tests that GUI settings persistence writes expected keys to the settings JSON file.",
+      "tags": [
+        "test",
+        "persistence",
+        "gui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_orchestrator.py:test_config_loader_rejects_empty_label_schema",
+      "type": "function",
+      "name": "test_config_loader_rejects_empty_label_schema",
+      "filePath": "tests/test_orchestrator.py",
+      "lineRange": [
+        31,
+        45
+      ],
+      "summary": "Asserts load_project_config raises when label_schema is empty in YAML config.",
+      "tags": [
+        "test",
+        "config",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:tests/test_orchestrator.py:test_orchestrator_end_to_end",
+      "type": "function",
+      "name": "test_orchestrator_end_to_end",
+      "filePath": "tests/test_orchestrator.py",
+      "lineRange": [
+        48,
+        74
+      ],
+      "summary": "Runs full orchestrator on synthetic images and checks bundle counts and output artifacts.",
+      "tags": [
+        "test",
+        "integration",
+        "orchestrator"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/tools/sam3/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/tools/sam3/__init__.py",
+      "summary": "Package barrel that re-exports the SAM3 segmentation client API (RawMask and prompt entry points) for use by agents and tests.",
+      "tags": [
+        "entry-point",
+        "barrel",
+        "sam3",
+        "segmentation",
+        "tested"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Explicit __all__ defines the public surface of the sam3 tools package."
+    },
+    {
+      "id": "file:src/tools/sam3/client.py",
+      "type": "file",
+      "name": "client.py",
+      "filePath": "src/tools/sam3/client.py",
+      "summary": "SAM3 segmentation client supporting mock, hosted API, and optional Hugging Face backends, with deterministic mock masks and HTTP payload helpers.",
+      "tags": [
+        "service",
+        "sam3",
+        "segmentation",
+        "api-handler",
+        "mock-backend",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Backend selection via params dict; lazy-imports hf_backend only when hf_local is requested."
+    },
+    {
+      "id": "file:tests/test_sam3_client.py",
+      "type": "file",
+      "name": "test_sam3_client.py",
+      "filePath": "tests/test_sam3_client.py",
+      "summary": "Pytest suite validating deterministic mock segmentation, exemplar prompts, stable seeding, and the sam3_api HTTP backend with monkeypatched urlopen.",
+      "tags": [
+        "test",
+        "sam3",
+        "pytest",
+        "segmentation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src/tools/sam3/client.py:RawMask",
+      "type": "class",
+      "name": "RawMask",
+      "filePath": "src/tools/sam3/client.py",
+      "lineRange": [
+        16,
+        20
+      ],
+      "summary": "Dataclass holding polygon, bounding box, area, and confidence for a single SAM3 mask detection.",
+      "tags": [
+        "data-model",
+        "segmentation",
+        "type-definition"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/tools/sam3/client.py:_seed_from",
+      "type": "function",
+      "name": "_seed_from",
+      "filePath": "src/tools/sam3/client.py",
+      "lineRange": [
+        23,
+        26
+      ],
+      "summary": "Derives a stable 16-bit integer seed from image path and class name via MD5 for reproducible mock masks.",
+      "tags": [
+        "utility",
+        "deterministic",
+        "hashing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/tools/sam3/client.py:_mock_text_prompt",
+      "type": "function",
+      "name": "_mock_text_prompt",
+      "filePath": "src/tools/sam3/client.py",
+      "lineRange": [
+        29,
+        85
+      ],
+      "summary": "Generates synthetic RawMask instances from a seeded RNG using image dimensions and area/confidence filters.",
+      "tags": [
+        "mock-backend",
+        "segmentation",
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/tools/sam3/client.py:_peek_image_size",
+      "type": "function",
+      "name": "_peek_image_size",
+      "filePath": "src/tools/sam3/client.py",
+      "lineRange": [
+        88,
+        95
+      ],
+      "summary": "Reads image width and height with Pillow, defaulting to 640x480 when the file is missing or unreadable.",
+      "tags": [
+        "utility",
+        "image-io"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/tools/sam3/client.py:_mock_exemplar_prompt",
+      "type": "function",
+      "name": "_mock_exemplar_prompt",
+      "filePath": "src/tools/sam3/client.py",
+      "lineRange": [
+        98,
+        108
+      ],
+      "summary": "Returns a single mock mask aligned to the provided exemplar bounding box with configurable confidence.",
+      "tags": [
+        "mock-backend",
+        "segmentation",
+        "exemplar"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/tools/sam3/client.py:_coerce_raw_masks",
+      "type": "function",
+      "name": "_coerce_raw_masks",
+      "filePath": "src/tools/sam3/client.py",
+      "lineRange": [
+        111,
+        133
+      ],
+      "summary": "Parses API JSON mask payloads into a list of RawMask objects with validated bbox and polygon shapes.",
+      "tags": [
+        "serialization",
+        "validation",
+        "api-handler"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/tools/sam3/client.py:_call_sam3_api",
+      "type": "function",
+      "name": "_call_sam3_api",
+      "filePath": "src/tools/sam3/client.py",
+      "lineRange": [
+        136,
+        159
+      ],
+      "summary": "POSTs a JSON payload to the configured SAM3 API URL with optional auth headers and parses the mask response.",
+      "tags": [
+        "api-handler",
+        "http-client",
+        "segmentation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/tools/sam3/client.py:_build_api_payload",
+      "type": "function",
+      "name": "_build_api_payload",
+      "filePath": "src/tools/sam3/client.py",
+      "lineRange": [
+        162,
+        183
+      ],
+      "summary": "Builds the SAM3 API request body with base64-encoded image bytes, model name, mode, and optional class or exemplar fields.",
+      "tags": [
+        "api-handler",
+        "serialization",
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/tools/sam3/client.py:sam3_segment_text_prompt",
+      "type": "function",
+      "name": "sam3_segment_text_prompt",
+      "filePath": "src/tools/sam3/client.py",
+      "lineRange": [
+        186,
+        234
+      ],
+      "summary": "Public text-prompt segmentation entry point routing to sam3_api, hf_local, or deterministic mock backends with optional fallback.",
+      "tags": [
+        "api-handler",
+        "segmentation",
+        "entry-point"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/tools/sam3/client.py:sam3_segment_exemplar_prompt",
+      "type": "function",
+      "name": "sam3_segment_exemplar_prompt",
+      "filePath": "src/tools/sam3/client.py",
+      "lineRange": [
+        237,
+        260
+      ],
+      "summary": "Public exemplar-bbox segmentation entry point using the API backend or mock exemplar mask generation.",
+      "tags": [
+        "api-handler",
+        "segmentation",
+        "exemplar"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:tests/test_sam3_client.py:test_sam3_segment_text_prompt_api_backend",
+      "type": "function",
+      "name": "test_sam3_segment_text_prompt_api_backend",
+      "filePath": "tests/test_sam3_client.py",
+      "lineRange": [
+        35,
+        68
+      ],
+      "summary": "Integration test that monkeypatches urlopen and asserts sam3_api backend returns parsed masks from a fake JSON response.",
+      "tags": [
+        "test",
+        "api-handler",
+        "mock-backend"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:CLAUDE_TEACHING_PROFILE.md",
+      "type": "document",
+      "name": "CLAUDE_TEACHING_PROFILE.md",
+      "filePath": "CLAUDE_TEACHING_PROFILE.md",
+      "summary": "Agent teaching profile template covering tone, workflow rules, teaching style, code conventions, and project layout—intended to be copied as CLAUDE.md or AGENTS.md for Claude Code sessions.",
+      "tags": [
+        "documentation",
+        "development",
+        "agent-guidelines",
+        "teaching"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Structured as paste-ready guidance with cheatsheet tables and explicit caveman-mode communication defaults."
+    },
+    {
+      "id": "document:README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "README.md",
+      "summary": "Primary project overview for the Agentic SAM3 auto-annotation lab: architecture diagrams, install and SAM3 weight setup, CLI/GUI run commands, output artifacts, GUI feature map, directory layout, tech stack, and roadmap.",
+      "tags": [
+        "documentation",
+        "entry-point",
+        "overview",
+        "onboarding"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Heavy use of Mermaid diagrams, collapsible install sections, and badges linking to the GitHub repository."
+    },
+    {
+      "id": "config:pyproject.toml",
+      "type": "config",
+      "name": "pyproject.toml",
+      "filePath": "pyproject.toml",
+      "summary": "Python packaging metadata for agentic-sam3-annotator: setuptools src layout, core dependencies (numpy, pydantic, PyYAML, Pillow), optional dev and Hugging Face extras, and pytest paths.",
+      "tags": [
+        "configuration",
+        "build-system",
+        "python-packaging",
+        "pytest"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:.understand-anything/.understandignore",
+      "type": "file",
+      "name": ".understandignore",
+      "filePath": ".understand-anything/.understandignore",
+      "summary": "Understand-Anything ignore patterns file using gitignore-style globs to exclude caches, models, and test artifacts from knowledge-graph analysis.",
+      "tags": [
+        "configuration",
+        "ignore-patterns",
+        "analysis-tooling",
+        "gitignore-syntax"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:config/project_example.yaml",
+      "type": "config",
+      "name": "project_example.yaml",
+      "filePath": "config/project_example.yaml",
+      "summary": "Example project YAML defining dataset paths, label schema, SAM3 backend options, QA thresholds, LLM settings, and YOLO export mode for the annotation pipeline.",
+      "tags": [
+        "configuration",
+        "yaml",
+        "sam3",
+        "orchestrator"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Top-level keys map directly to ProjectConfig and orchestrator tuning knobs documented in agent-spec.md."
+    },
+    {
+      "id": "file:data/images/.gitkeep",
+      "type": "file",
+      "name": ".gitkeep",
+      "filePath": "data/images/.gitkeep",
+      "summary": "Placeholder file that keeps the input images directory under version control while allowing the folder to remain empty initially.",
+      "tags": [
+        "data-directory",
+        "placeholder",
+        "dataset-input"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/agent-spec.md",
+      "type": "document",
+      "name": "agent-spec.md",
+      "filePath": "docs/agent-spec.md",
+      "summary": "Comprehensive architecture specification for the agentic SAM3 auto-annotation lab covering data models, multi-agent chatroom design, orchestrator flow, tools layer, and phased implementation plan.",
+      "tags": [
+        "documentation",
+        "architecture",
+        "multi-agent",
+        "sam3"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:notebooks/exploration.ipynb",
+      "type": "file",
+      "name": "exploration.ipynb",
+      "filePath": "notebooks/exploration.ipynb",
+      "summary": "Minimal Jupyter notebook scaffold for ad-hoc experiments with the SAM3 client and QA logic outside the main orchestrator pipeline.",
+      "tags": [
+        "notebook",
+        "exploration",
+        "sam3",
+        "prototyping"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/__init__.py",
+      "summary": "Root package marker for the src namespace with no re-exports or initialization logic.",
+      "tags": [
+        "entry-point",
+        "package-marker",
+        "python"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/agents/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/agents/__init__.py",
+      "summary": "Package initializer for conversational agents; currently an empty module reserved for future agent exports.",
+      "tags": [
+        "entry-point",
+        "package-marker",
+        "agents"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/core/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/core/__init__.py",
+      "summary": "Package initializer for core orchestration and data-model modules with no public re-exports yet.",
+      "tags": [
+        "entry-point",
+        "package-marker",
+        "core"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/tools/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/tools/__init__.py",
+      "summary": "Package initializer for the tools layer housing SAM3 clients, geometry helpers, and exporters.",
+      "tags": [
+        "entry-point",
+        "package-marker",
+        "tools"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/tools/sam3/hf_backend.py",
+      "type": "file",
+      "name": "hf_backend.py",
+      "filePath": "src/tools/sam3/hf_backend.py",
+      "summary": "Local Hugging Face SAM3 backend that loads facebook/sam3 via transformers, runs single-frame video-session text-prompt segmentation, and returns polygon detections with bounding boxes.",
+      "tags": [
+        "sam3",
+        "huggingface",
+        "segmentation",
+        "service"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Uses thread-safe model caching, lazy torch/transformers imports, and treats a single image as a one-frame video for the SAM3 video API."
+    },
+    {
+      "id": "file:src/tools/yolo/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/tools/yolo/__init__.py",
+      "summary": "YOLO tools package barrel that re-exports export_yolo from the exporter module as the public API.",
+      "tags": [
+        "barrel",
+        "entry-point",
+        "yolo",
+        "exports"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/tools/yolo/exporter.py",
+      "type": "file",
+      "name": "exporter.py",
+      "filePath": "src/tools/yolo/exporter.py",
+      "summary": "Converts accepted AnnotationBundle records into YOLO label files and a classes.txt manifest, supporting both normalized bounding-box and polygon segmentation formats.",
+      "tags": [
+        "exporter",
+        "yolo",
+        "serialization",
+        "annotation-output"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/ui/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/ui/__init__.py",
+      "summary": "Package initializer for optional human-review UI components; currently empty pending review_app implementation.",
+      "tags": [
+        "entry-point",
+        "package-marker",
+        "ui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/tools/sam3/hf_backend.py:_resolve_device",
+      "type": "function",
+      "name": "_resolve_device",
+      "filePath": "src/tools/sam3/hf_backend.py",
+      "lineRange": [
+        28,
+        35
+      ],
+      "summary": "Resolves the torch compute device from an explicit preference or auto-detects CUDA versus CPU availability.",
+      "tags": [
+        "utility",
+        "device-selection",
+        "torch"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/tools/sam3/hf_backend.py:_load_model",
+      "type": "function",
+      "name": "_load_model",
+      "filePath": "src/tools/sam3/hf_backend.py",
+      "lineRange": [
+        38,
+        79
+      ],
+      "summary": "Thread-safe loader that caches Hugging Face SAM3 model and processor pairs, supporting offline local snapshots and dtype selection per device.",
+      "tags": [
+        "model-loading",
+        "caching",
+        "huggingface",
+        "singleton"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/tools/sam3/hf_backend.py:_mask_to_detection",
+      "type": "function",
+      "name": "_mask_to_detection",
+      "filePath": "src/tools/sam3/hf_backend.py",
+      "lineRange": [
+        82,
+        150
+      ],
+      "summary": "Converts a raw segmentation mask tensor or array into a _Detection with contour-derived polygon, axis-aligned bbox, area, and confidence score.",
+      "tags": [
+        "geometry",
+        "mask-processing",
+        "opencv",
+        "conversion"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src/tools/sam3/hf_backend.py:segment_text_prompt",
+      "type": "function",
+      "name": "segment_text_prompt",
+      "filePath": "src/tools/sam3/hf_backend.py",
+      "lineRange": [
+        153,
+        202
+      ],
+      "summary": "Public SAM3 entry point that segments objects in an image from a text class prompt using the HF video-session API and score threshold filtering.",
+      "tags": [
+        "sam3",
+        "segmentation",
+        "api-handler",
+        "text-prompt"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/tools/yolo/exporter.py:export_yolo",
+      "type": "function",
+      "name": "export_yolo",
+      "filePath": "src/tools/yolo/exporter.py",
+      "lineRange": [
+        9,
+        64
+      ],
+      "summary": "Writes per-image YOLO label text files and classes.txt from accepted annotation bundles with optional polygon segmentation output.",
+      "tags": [
+        "exporter",
+        "yolo",
+        "serialization",
+        "dataset-output"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src/core/models.py:HumanReviewPolicy",
+      "type": "class",
+      "name": "HumanReviewPolicy",
+      "filePath": "src/core/models.py",
+      "lineRange": [
+        21,
+        23
+      ],
+      "summary": "Pydantic model controlling whether failed QA bundles escalate to human review and how many retries are allowed.",
+      "tags": [
+        "data-model",
+        "configuration",
+        "pydantic",
+        "human-review"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/core/models.py:new_mask_id",
+      "type": "function",
+      "name": "new_mask_id",
+      "filePath": "src/core/models.py",
+      "lineRange": [
+        100,
+        101
+      ],
+      "summary": "Generates a unique string mask identifier using uuid4 for new MaskRecord instances.",
+      "tags": [
+        "utility",
+        "uuid",
+        "mask",
+        "identifier"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/core/orchestrator.py:list_image_paths",
+      "type": "function",
+      "name": "list_image_paths",
+      "filePath": "src/core/orchestrator.py",
+      "lineRange": [
+        74,
+        80
+      ],
+      "summary": "Collects sorted image file paths from a dataset directory, optionally recursing subfolders and filtering by image suffix.",
+      "tags": [
+        "utility",
+        "dataset",
+        "discovery",
+        "filesystem"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src/agents/base_agent.py",
+      "target": "file:src/core/models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/agents/coordinator_agent.py",
+      "target": "file:src/agents/base_agent.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/agents/coordinator_agent.py",
+      "target": "file:src/core/models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/agents/curation_agent.py",
+      "target": "file:src/agents/base_agent.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/agents/curation_agent.py",
+      "target": "file:src/core/models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/agents/curation_agent.py",
+      "target": "file:src/tools/geometry.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/agents/sam3_agent.py",
+      "target": "file:src/agents/base_agent.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/agents/sam3_agent.py",
+      "target": "file:src/core/models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/agents/sam3_agent.py",
+      "target": "file:src/tools/sam3/__init__.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "file:src/agents/coordinator_agent.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "file:src/agents/curation_agent.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "file:src/agents/sam3_agent.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "file:src/core/models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "file:src/tools/captioning.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "file:src/tools/yolo/__init__.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tools/geometry.py",
+      "target": "file:src/core/models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_agents.py",
+      "target": "file:src/agents/coordinator_agent.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_agents.py",
+      "target": "file:src/agents/curation_agent.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_agents.py",
+      "target": "file:src/agents/sam3_agent.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_agents.py",
+      "target": "file:src/core/models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_agents.py",
+      "target": "file:src/core/orchestrator.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_geometry.py",
+      "target": "file:src/core/models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_geometry.py",
+      "target": "file:src/tools/geometry.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/agents/base_agent.py",
+      "target": "class:src/agents/base_agent.py:BaseAgent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/agents/base_agent.py",
+      "target": "class:src/agents/base_agent.py:BaseAgent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/agents/coordinator_agent.py",
+      "target": "class:src/agents/coordinator_agent.py:CoordinatorAgent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/agents/coordinator_agent.py",
+      "target": "class:src/agents/coordinator_agent.py:CoordinatorAgent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/agents/curation_agent.py",
+      "target": "class:src/agents/curation_agent.py:CurationAgent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/agents/curation_agent.py",
+      "target": "class:src/agents/curation_agent.py:CurationAgent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/agents/sam3_agent.py",
+      "target": "class:src/agents/sam3_agent.py:SAM3Agent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/agents/sam3_agent.py",
+      "target": "class:src/agents/sam3_agent.py:SAM3Agent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:ProjectConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:ProjectConfig",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:ImageRecord",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:ImageRecord",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:MaskRecord",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:MaskRecord",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:QAResult",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:QAResult",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:ConversationMessage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:ConversationMessage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:AnnotationBundle",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:AnnotationBundle",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:_read_image_size",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:_read_image_size",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:discover_images",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:discover_images",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:_apply_actions",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:_apply_actions",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:run_bundle_conversation",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:run_bundle_conversation",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:_slim_message",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:_slim_message",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:_export_conversation_logs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:_export_conversation_logs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:_export_qa_report",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:_export_qa_report",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:run_orchestrator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:run_orchestrator",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/geometry.py",
+      "target": "function:src/tools/geometry.py:compute_iou",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/geometry.py",
+      "target": "function:src/tools/geometry.py:compute_iou",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/geometry.py",
+      "target": "function:src/tools/geometry.py:bbox_iou",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/geometry.py",
+      "target": "function:src/tools/geometry.py:bbox_iou",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/geometry.py",
+      "target": "function:src/tools/geometry.py:summarize_masks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/geometry.py",
+      "target": "function:src/tools/geometry.py:summarize_masks",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/geometry.py",
+      "target": "function:src/tools/geometry.py:pairwise_bbox_iou",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/geometry.py",
+      "target": "function:src/tools/geometry.py:pairwise_bbox_iou",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_agents.py",
+      "target": "function:tests/test_agents.py:_make_config",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_agents.py",
+      "target": "function:tests/test_agents.py:test_single_bundle_reaches_terminal_state",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_agents.py",
+      "target": "function:tests/test_agents.py:test_curation_flags_empty_masks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_agents.py",
+      "target": "function:tests/test_agents.py:test_curation_caption_memoized",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_geometry.py",
+      "target": "function:tests/test_geometry.py:test_summarize_masks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:src/agents/coordinator_agent.py:CoordinatorAgent",
+      "target": "class:src/agents/base_agent.py:BaseAgent",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "class:src/agents/curation_agent.py:CurationAgent",
+      "target": "class:src/agents/base_agent.py:BaseAgent",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "class:src/agents/sam3_agent.py:SAM3Agent",
+      "target": "class:src/agents/base_agent.py:BaseAgent",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "class:src/agents/curation_agent.py:CurationAgent",
+      "target": "function:src/tools/geometry.py:pairwise_bbox_iou",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:discover_images",
+      "target": "function:src/core/orchestrator.py:_read_image_size",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_bundle_conversation",
+      "target": "class:src/agents/coordinator_agent.py:CoordinatorAgent",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_bundle_conversation",
+      "target": "class:src/agents/sam3_agent.py:SAM3Agent",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_bundle_conversation",
+      "target": "class:src/agents/curation_agent.py:CurationAgent",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_bundle_conversation",
+      "target": "function:src/core/orchestrator.py:_apply_actions",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:_export_conversation_logs",
+      "target": "function:src/core/orchestrator.py:_slim_message",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_orchestrator",
+      "target": "function:src/core/orchestrator.py:discover_images",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_orchestrator",
+      "target": "function:src/core/orchestrator.py:run_bundle_conversation",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_orchestrator",
+      "target": "function:src/tools/yolo/exporter.py:export_yolo",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_orchestrator",
+      "target": "function:src/core/orchestrator.py:_export_conversation_logs",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_orchestrator",
+      "target": "function:src/core/orchestrator.py:_export_qa_report",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_orchestrator",
+      "target": "class:src/agents/coordinator_agent.py:CoordinatorAgent",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_orchestrator",
+      "target": "class:src/agents/sam3_agent.py:SAM3Agent",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/orchestrator.py:run_orchestrator",
+      "target": "class:src/agents/curation_agent.py:CurationAgent",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:tests/test_agents.py:test_single_bundle_reaches_terminal_state",
+      "target": "function:src/core/orchestrator.py:run_bundle_conversation",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:tests/test_agents.py:test_curation_flags_empty_masks",
+      "target": "class:src/agents/curation_agent.py:CurationAgent",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:tests/test_geometry.py:test_summarize_masks",
+      "target": "function:src/tools/geometry.py:summarize_masks",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/agents/coordinator_agent.py",
+      "target": "file:tests/test_agents.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/agents/curation_agent.py",
+      "target": "file:tests/test_agents.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/agents/sam3_agent.py",
+      "target": "file:tests/test_agents.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "file:tests/test_agents.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/tools/geometry.py",
+      "target": "file:tests/test_geometry.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "file:src/tools/captioning.py",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/core/config_loader.py",
+      "target": "function:src/core/config_loader.py:_require_mapping",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/config_loader.py",
+      "target": "function:src/core/config_loader.py:_require_mapping",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/config_loader.py",
+      "target": "function:src/core/config_loader.py:load_project_config",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/config_loader.py",
+      "target": "function:src/core/config_loader.py:load_project_config",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/logging_utils.py",
+      "target": "function:src/core/logging_utils.py:setup_logging",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/logging_utils.py",
+      "target": "function:src/core/logging_utils.py:setup_logging",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "function:src/main.py:parse_args",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "function:src/main.py:parse_args",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "function:src/main.py:_apply_overrides",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "function:src/main.py:_apply_overrides",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "function:src/main.py:_apply_prompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "function:src/main.py:_apply_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "function:src/main.py:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "function:src/main.py:main",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/prompt_interpreter.py",
+      "target": "function:src/tools/prompt_interpreter.py:_canonical_for",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/prompt_interpreter.py",
+      "target": "function:src/tools/prompt_interpreter.py:_canonical_for",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/prompt_interpreter.py",
+      "target": "function:src/tools/prompt_interpreter.py:interpret_prompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/prompt_interpreter.py",
+      "target": "function:src/tools/prompt_interpreter.py:interpret_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/prompt_interpreter.py",
+      "target": "class:src/tools/prompt_interpreter.py:PromptPlan",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/prompt_interpreter.py",
+      "target": "class:src/tools/prompt_interpreter.py:PromptPlan",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:project_root",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:project_root",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:resolve_path",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:resolve_path",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:color_for",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:color_for",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:load_json",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:load_json",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:save_json",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:save_json",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:open_in_explorer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:open_in_explorer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:attach_tooltip",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "function:src/ui/_helpers.py:attach_tooltip",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/config_loader.py",
+      "target": "file:src/core/models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "file:src/core/config_loader.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "file:src/core/logging_utils.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "file:src/core/orchestrator.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.py",
+      "target": "file:src/tools/prompt_interpreter.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:src/core/config_loader.py:load_project_config",
+      "target": "class:src/core/models.py:ProjectConfig",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/main.py:_apply_prompt",
+      "target": "function:src/tools/prompt_interpreter.py:interpret_prompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/main.py:main",
+      "target": "function:src/core/config_loader.py:load_project_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/main.py:main",
+      "target": "function:src/core/logging_utils.py:setup_logging",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/main.py:main",
+      "target": "function:src/core/orchestrator.py:discover_images",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/main.py:main",
+      "target": "function:src/core/orchestrator.py:run_orchestrator",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/_helpers.py",
+      "target": "file:tests/test_gui.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/core/config_loader.py",
+      "target": "file:tests/test_orchestrator.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "file:tests/test_orchestrator.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/tools/prompt_interpreter.py",
+      "target": "file:tests/test_prompt_interpreter.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/ui/labeler.py",
+      "target": "class:src/ui/labeler.py:_Shape",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/labeler.py",
+      "target": "class:src/ui/labeler.py:_Shape",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/labeler.py",
+      "target": "class:src/ui/labeler.py:LabelerPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/labeler.py",
+      "target": "class:src/ui/labeler.py:LabelerPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "function:src/ui/review_app.py:_load_recent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "function:src/ui/review_app.py:_load_recent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "function:src/ui/review_app.py:_save_recent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "function:src/ui/review_app.py:_save_recent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "function:src/ui/review_app.py:_install_safety_guards",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "function:src/ui/review_app.py:_install_safety_guards",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "function:src/ui/review_app.py:_install_tk_error_handler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "function:src/ui/review_app.py:_install_tk_error_handler",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "function:src/ui/review_app.py:launch_review_app",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "function:src/ui/review_app.py:launch_review_app",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "class:src/ui/review_app.py:_QueueHandler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "class:src/ui/review_app.py:_QueueHandler",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "class:src/ui/review_app.py:AnnotatorGUI",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "class:src/ui/review_app.py:AnnotatorGUI",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:root",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:root",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_queue_handler_emits",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_queue_handler_emits",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_queue_handler_bounded",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_queue_handler_bounded",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_load_image_and_save_json",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_load_image_and_save_json",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_undo",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_undo",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_delete_shape",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_delete_shape",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_zoom_clamping",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_zoom_clamping",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_load_existing_json",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_load_existing_json",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_load_image_navigation",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_load_image_navigation",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_coord_roundtrip",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_coord_roundtrip",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_finish_polygon_needs_3pts",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_labeler_finish_polygon_needs_3pts",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_save_settings_writes_file",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "function:tests/test_gui.py:test_save_settings_writes_file",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_orchestrator.py",
+      "target": "function:tests/test_orchestrator.py:test_config_loader_rejects_empty_label_schema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_orchestrator.py",
+      "target": "function:tests/test_orchestrator.py:test_config_loader_rejects_empty_label_schema",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:tests/test_orchestrator.py",
+      "target": "function:tests/test_orchestrator.py:test_orchestrator_end_to_end",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_orchestrator.py",
+      "target": "function:tests/test_orchestrator.py:test_orchestrator_end_to_end",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/labeler.py",
+      "target": "file:src/ui/_helpers.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "file:src/core/config_loader.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "file:src/core/logging_utils.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "file:src/core/orchestrator.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "file:src/tools/prompt_interpreter.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "file:src/ui/_helpers.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "file:src/ui/labeler.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "file:src/ui/_helpers.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "file:src/ui/labeler.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_gui.py",
+      "target": "file:src/ui/review_app.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_orchestrator.py",
+      "target": "file:src/core/config_loader.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_orchestrator.py",
+      "target": "file:src/core/orchestrator.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_prompt_interpreter.py",
+      "target": "file:src/tools/prompt_interpreter.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "function:src/core/config_loader.py:load_project_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "function:src/core/logging_utils.py:setup_logging",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "function:src/core/orchestrator.py:run_orchestrator",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "function:src/tools/prompt_interpreter.py:interpret_prompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "function:src/ui/_helpers.py:resolve_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "function:src/ui/_helpers.py:save_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "function:src/ui/_helpers.py:load_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "function:src/ui/_helpers.py:attach_tooltip",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "function:src/ui/_helpers.py:project_root",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "class:src/ui/labeler.py:LabelerPanel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/labeler.py:LabelerPanel",
+      "target": "function:src/core/config_loader.py:load_project_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/labeler.py:LabelerPanel",
+      "target": "function:src/ui/_helpers.py:color_for",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/ui/review_app.py:_load_recent",
+      "target": "function:src/ui/_helpers.py:load_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/ui/review_app.py:_save_recent",
+      "target": "function:src/ui/_helpers.py:save_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:tests/test_orchestrator.py:test_config_loader_rejects_empty_label_schema",
+      "target": "function:src/core/config_loader.py:load_project_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:tests/test_orchestrator.py:test_orchestrator_end_to_end",
+      "target": "function:src/core/config_loader.py:load_project_config",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:tests/test_orchestrator.py:test_orchestrator_end_to_end",
+      "target": "function:src/core/orchestrator.py:run_orchestrator",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/ui/labeler.py",
+      "target": "file:tests/test_gui.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/ui/review_app.py",
+      "target": "file:tests/test_gui.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/tools/sam3/__init__.py",
+      "target": "file:src/tools/sam3/client.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_sam3_client.py",
+      "target": "file:src/tools/sam3/__init__.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/test_sam3_client.py",
+      "target": "file:src/tools/sam3/client.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "class:src/tools/sam3/client.py:RawMask",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_seed_from",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_mock_text_prompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_peek_image_size",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_mock_exemplar_prompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_coerce_raw_masks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_call_sam3_api",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_build_api_payload",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:sam3_segment_text_prompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:sam3_segment_exemplar_prompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:tests/test_sam3_client.py",
+      "target": "function:tests/test_sam3_client.py:test_sam3_segment_text_prompt_api_backend",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "class:src/tools/sam3/client.py:RawMask",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_seed_from",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_mock_text_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_peek_image_size",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_mock_exemplar_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_coerce_raw_masks",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_call_sam3_api",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:_build_api_payload",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:sam3_segment_text_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "function:src/tools/sam3/client.py:sam3_segment_exemplar_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/__init__.py",
+      "target": "class:src/tools/sam3/client.py:RawMask",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/__init__.py",
+      "target": "function:src/tools/sam3/client.py:sam3_segment_text_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/__init__.py",
+      "target": "function:src/tools/sam3/client.py:sam3_segment_exemplar_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/client.py:_mock_text_prompt",
+      "target": "function:src/tools/sam3/client.py:_seed_from",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/client.py:_mock_text_prompt",
+      "target": "function:src/tools/sam3/client.py:_peek_image_size",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/client.py:_call_sam3_api",
+      "target": "function:src/tools/sam3/client.py:_coerce_raw_masks",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/client.py:sam3_segment_text_prompt",
+      "target": "function:src/tools/sam3/client.py:_build_api_payload",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/client.py:sam3_segment_text_prompt",
+      "target": "function:src/tools/sam3/client.py:_call_sam3_api",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/client.py:sam3_segment_text_prompt",
+      "target": "function:src/tools/sam3/client.py:_mock_text_prompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/client.py:sam3_segment_exemplar_prompt",
+      "target": "function:src/tools/sam3/client.py:_build_api_payload",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/client.py:sam3_segment_exemplar_prompt",
+      "target": "function:src/tools/sam3/client.py:_call_sam3_api",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/client.py:sam3_segment_exemplar_prompt",
+      "target": "function:src/tools/sam3/client.py:_mock_exemplar_prompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:tests/test_sam3_client.py:test_sam3_segment_text_prompt_api_backend",
+      "target": "function:src/tools/sam3/client.py:sam3_segment_text_prompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/client.py",
+      "target": "file:tests/test_sam3_client.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/tools/sam3/__init__.py",
+      "target": "file:tests/test_sam3_client.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:README.md",
+      "target": "document:CLAUDE_TEACHING_PROFILE.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:pyproject.toml",
+      "target": "document:README.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:README.md",
+      "target": "file:src/main.py",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:README.md",
+      "target": "file:src/ui/review_app.py",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:CLAUDE_TEACHING_PROFILE.md",
+      "target": "file:src/main.py",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:pyproject.toml",
+      "target": "file:src/main.py",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:pyproject.toml",
+      "target": "file:tests/test_agents.py",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/tools/yolo/__init__.py",
+      "target": "file:src/tools/yolo/exporter.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tools/yolo/exporter.py",
+      "target": "file:src/core/models.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tools/sam3/hf_backend.py",
+      "target": "function:src/tools/sam3/hf_backend.py:_resolve_device",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/hf_backend.py",
+      "target": "function:src/tools/sam3/hf_backend.py:_load_model",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/hf_backend.py",
+      "target": "function:src/tools/sam3/hf_backend.py:_mask_to_detection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/hf_backend.py",
+      "target": "function:src/tools/sam3/hf_backend.py:segment_text_prompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/yolo/exporter.py",
+      "target": "function:src/tools/yolo/exporter.py:export_yolo",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tools/sam3/hf_backend.py",
+      "target": "function:src/tools/sam3/hf_backend.py:_resolve_device",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/hf_backend.py",
+      "target": "function:src/tools/sam3/hf_backend.py:_load_model",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/hf_backend.py",
+      "target": "function:src/tools/sam3/hf_backend.py:_mask_to_detection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/sam3/hf_backend.py",
+      "target": "function:src/tools/sam3/hf_backend.py:segment_text_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/yolo/exporter.py",
+      "target": "function:src/tools/yolo/exporter.py:export_yolo",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/tools/yolo/__init__.py",
+      "target": "function:src/tools/yolo/exporter.py:export_yolo",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/hf_backend.py:_load_model",
+      "target": "function:src/tools/sam3/hf_backend.py:_resolve_device",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/hf_backend.py:segment_text_prompt",
+      "target": "function:src/tools/sam3/hf_backend.py:_load_model",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tools/sam3/hf_backend.py:segment_text_prompt",
+      "target": "function:src/tools/sam3/hf_backend.py:_mask_to_detection",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "config:config/project_example.yaml",
+      "target": "file:data/images/.gitkeep",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:config/project_example.yaml",
+      "target": "file:src/tools/sam3/hf_backend.py",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:config/project_example.yaml",
+      "target": "file:src/tools/yolo/exporter.py",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:docs/agent-spec.md",
+      "target": "config:config/project_example.yaml",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/agent-spec.md",
+      "target": "file:src/tools/sam3/hf_backend.py",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/agent-spec.md",
+      "target": "file:src/tools/yolo/exporter.py",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/agent-spec.md",
+      "target": "file:src/core/models.py",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/agent-spec.md",
+      "target": "file:src/core/orchestrator.py",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/agent-spec.md",
+      "target": "file:notebooks/exploration.ipynb",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:notebooks/exploration.ipynb",
+      "target": "file:src/tools/sam3/hf_backend.py",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:HumanReviewPolicy",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "class:src/core/models.py:HumanReviewPolicy",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "function:src/core/models.py:new_mask_id",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/models.py",
+      "target": "function:src/core/models.py:new_mask_id",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:list_image_paths",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:src/core/orchestrator.py",
+      "target": "function:src/core/orchestrator.py:list_image_paths",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/agents/sam3_agent.py:SAM3Agent",
+      "target": "function:src/core/models.py:new_mask_id",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/core/config_loader.py:load_project_config",
+      "target": "class:src/core/models.py:HumanReviewPolicy",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:src/ui/review_app.py:AnnotatorGUI",
+      "target": "function:src/core/orchestrator.py:list_image_paths",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "document:README.md",
+      "target": "config:config/project_example.yaml",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:README.md",
+      "target": "document:docs/agent-spec.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:application-entry",
+      "name": "Application Entry",
+      "description": "CLI entry point that parses arguments, loads project config, interprets annotation prompts, and launches the orchestrator pipeline.",
+      "nodeIds": [
+        "file:src/main.py",
+        "file:src/__init__.py"
+      ]
+    },
+    {
+      "id": "layer:orchestration",
+      "name": "Orchestration Layer",
+      "description": "Core pipeline coordination including image discovery, parallel multi-agent bundle processing, YAML config loading, and dual file/stream logging.",
+      "nodeIds": [
+        "file:src/core/orchestrator.py",
+        "file:src/core/config_loader.py",
+        "file:src/core/logging_utils.py",
+        "file:src/core/__init__.py"
+      ]
+    },
+    {
+      "id": "layer:data",
+      "name": "Data Layer",
+      "description": "Shared Pydantic models for project configuration, image and mask records, QA results, conversation messages, and annotation bundles used across all agents.",
+      "nodeIds": [
+        "file:src/core/models.py"
+      ]
+    },
+    {
+      "id": "layer:agent",
+      "name": "Agent Layer",
+      "description": "Multi-agent conversation system with coordinator workflow routing, SAM3 segmentation, and curation QA validation agents built on a shared base contract.",
+      "nodeIds": [
+        "file:src/agents/base_agent.py",
+        "file:src/agents/coordinator_agent.py",
+        "file:src/agents/curation_agent.py",
+        "file:src/agents/sam3_agent.py",
+        "file:src/agents/__init__.py"
+      ]
+    },
+    {
+      "id": "layer:tools",
+      "name": "Tools Layer",
+      "description": "Integration and utility modules for SAM3 segmentation backends, mask geometry checks, prompt parsing, captioning stubs, and YOLO label export.",
+      "nodeIds": [
+        "file:src/tools/captioning.py",
+        "file:src/tools/geometry.py",
+        "file:src/tools/prompt_interpreter.py",
+        "file:src/tools/sam3/__init__.py",
+        "file:src/tools/sam3/client.py",
+        "file:src/tools/sam3/hf_backend.py",
+        "file:src/tools/yolo/__init__.py",
+        "file:src/tools/yolo/exporter.py",
+        "file:src/tools/__init__.py"
+      ]
+    },
+    {
+      "id": "layer:ui",
+      "name": "UI Layer",
+      "description": "Optional Tkinter human-review interface with setup tabs, LabelMe-compatible manual annotation panel, and background orchestrator execution.",
+      "nodeIds": [
+        "file:src/ui/_helpers.py",
+        "file:src/ui/labeler.py",
+        "file:src/ui/review_app.py",
+        "file:src/ui/__init__.py"
+      ]
+    },
+    {
+      "id": "layer:test",
+      "name": "Test Layer",
+      "description": "Pytest suites covering multi-agent conversations, orchestrator end-to-end runs, SAM3 client backends, geometry utilities, GUI components, and prompt parsing.",
+      "nodeIds": [
+        "file:tests/test_agents.py",
+        "file:tests/test_geometry.py",
+        "file:tests/test_gui.py",
+        "file:tests/test_orchestrator.py",
+        "file:tests/test_prompt_interpreter.py",
+        "file:tests/test_sam3_client.py"
+      ]
+    },
+    {
+      "id": "layer:documentation",
+      "name": "Documentation",
+      "description": "Project overview, multi-agent architecture specification, agent teaching profile, and exploratory Jupyter notebook for SAM3 and QA experiments.",
+      "nodeIds": [
+        "document:CLAUDE_TEACHING_PROFILE.md",
+        "document:README.md",
+        "document:docs/agent-spec.md",
+        "file:notebooks/exploration.ipynb"
+      ]
+    },
+    {
+      "id": "layer:config",
+      "name": "Configuration",
+      "description": "Python packaging metadata, example project YAML with SAM3 and QA settings, dataset directory placeholder, and knowledge-graph analysis ignore patterns.",
+      "nodeIds": [
+        "config:pyproject.toml",
+        "config:config/project_example.yaml",
+        "file:.understand-anything/.understandignore",
+        "file:data/images/.gitkeep"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "CLI Entry Point",
+      "description": "Start here at main.py, the command-line front door for the entire annotation lab. This module parses CLI flags, loads the project YAML, interprets free-text annotation prompts, configures logging, and hands control to the orchestrator pipeline. Understanding main.py shows how a single run command fans out into config loading, prompt planning, and parallel multi-agent processing.",
+      "nodeIds": [
+        "file:src/main.py"
+      ],
+      "languageLesson": "Python's argparse module defines a declarative CLI: add_argument calls register flags and positional args, while a main() guard (`if __name__ == '__main__'`) keeps the entry point import-safe for tests."
+    },
+    {
+      "order": 2,
+      "title": "Project Overview",
+      "description": "The README documents the same architecture you just traced from main.py: User → GUI/CLI → CoordinatorAgent → SAM3Agent/CurationAgent → YOLO and LabelMe export. It covers installation, SAM3 weight setup, run commands, output artifacts (qa_report.json, conversation logs), and the annotation state machine (NEW → ANNOTATED → ACCEPTED/QA_RETRY → export or HUMAN_REVIEW). Keep this open as a roadmap while exploring the code.",
+      "nodeIds": [
+        "document:README.md"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "Project Configuration",
+      "description": "Before the pipeline runs, config_loader.py reads the YAML project file into a typed ProjectConfig Pydantic model, validating required sections like label schema and dataset paths. The example YAML shows every tunable knob—SAM3 backend choice, QA thresholds, LLM settings, and YOLO export mode—so you can see exactly what main.py loads on startup.",
+      "nodeIds": [
+        "file:src/core/config_loader.py",
+        "config:config/project_example.yaml"
+      ],
+      "languageLesson": "YAML configuration files separate runtime settings from code. PyYAML loads the raw dict, then Pydantic validates and coerces it into typed models—catching misconfiguration before any images are processed."
+    },
+    {
+      "order": 4,
+      "title": "Shared Data Models",
+      "description": "models.py is the most depended-upon module in the codebase, defining the shared vocabulary every layer speaks: ProjectConfig, ImageRecord, MaskRecord, QAResult, ConversationMessage, and AnnotationBundle. These Pydantic models enforce the contract between agents, the orchestrator, exporters, and the GUI. When you read any agent or tool, the types here tell you what data flows where.",
+      "nodeIds": [
+        "file:src/core/models.py"
+      ],
+      "languageLesson": "Pydantic BaseModel classes provide runtime validation and serialization. Field defaults, validators, and model_config let you express domain constraints declaratively instead of scattering if-checks across the codebase."
+    },
+    {
+      "order": 5,
+      "title": "Pipeline Orchestrator",
+      "description": "The orchestrator is the heart of the system: it discovers images, spins up a ThreadPool for parallel bundle processing, and runs the multi-agent conversation loop for each image. After agents finish, it exports YOLO labels, writes qa_report.json, and saves conversation logs. This file connects every major subsystem—agents, captioning, and YOLO export—into one end-to-end pipeline.",
+      "nodeIds": [
+        "file:src/core/orchestrator.py",
+        "file:src/core/logging_utils.py"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "Multi-Agent Chatroom",
+      "description": "The agent layer implements the README's multi-agent chatroom pattern. BaseAgent defines the conversation contract (should_respond and respond), CoordinatorAgent routes workflow actions based on bundle state, SAM3Agent generates masks from text or exemplar prompts, and CurationAgent validates annotations and returns QA decisions. Together they drive each image through the NEW → ANNOTATED → ACCEPTED/QA_RETRY state machine.",
+      "nodeIds": [
+        "file:src/agents/base_agent.py",
+        "file:src/agents/coordinator_agent.py",
+        "file:src/agents/sam3_agent.py",
+        "file:src/agents/curation_agent.py"
+      ],
+      "languageLesson": "Python abstract base classes (ABC) with @abstractmethod enforce a shared interface. Each concrete agent inherits BaseAgent and implements should_respond/respond, enabling polymorphic dispatch in the orchestrator's conversation loop."
+    },
+    {
+      "order": 7,
+      "title": "SAM3 Segmentation Backends",
+      "description": "When SAM3Agent receives an annotate action, it calls into the SAM3 tools layer. The client module provides a unified API with mock, hosted HTTP, and Hugging Face backends—supporting offline development and production segmentation. The HF backend loads facebook/sam3 via transformers for real local inference, returning polygon detections with bounding boxes that become MaskRecord objects in the bundle.",
+      "nodeIds": [
+        "file:src/tools/sam3/__init__.py",
+        "file:src/tools/sam3/client.py",
+        "file:src/tools/sam3/hf_backend.py"
+      ]
+    },
+    {
+      "order": 8,
+      "title": "QA Validation Tools",
+      "description": "CurationAgent relies on the tools layer for quality checks beyond simple accept/reject. geometry.py computes mask area, IoU, and bounding-box overlap for duplicate and empty-mask detection, while captioning.py provides placeholder captions for caption-consistency QA. These utilities translate raw MaskRecord data into the metrics that drive QAResult decisions and retry logic.",
+      "nodeIds": [
+        "file:src/tools/geometry.py",
+        "file:src/tools/captioning.py"
+      ]
+    },
+    {
+      "order": 9,
+      "title": "Prompt Interpreter",
+      "description": "Both the CLI and GUI accept free-text prompts like 'annotate all cars and pedestrians.' The prompt interpreter converts natural language into a structured PromptPlan with class lists and per-class SAM3 text prompts via synonym expansion and bigram handling. This bridges user intent from main.py and review_app.py into the concrete segmentation prompts SAM3Agent executes.",
+      "nodeIds": [
+        "file:src/tools/prompt_interpreter.py"
+      ]
+    },
+    {
+      "order": 10,
+      "title": "YOLO Label Export",
+      "description": "Accepted AnnotationBundle records flow into the YOLO exporter, which writes normalized label files and a classes.txt manifest. The exporter supports both bounding-box and polygon segmentation formats, producing the training-ready artifacts described in the README's output section. The orchestrator calls export_yolo after all bundles reach terminal states.",
+      "nodeIds": [
+        "file:src/tools/yolo/__init__.py",
+        "file:src/tools/yolo/exporter.py"
+      ]
+    },
+    {
+      "order": 11,
+      "title": "Tkinter GUI Interface",
+      "description": "review_app.py provides the GUI alternative to the CLI entry point, with Setup, Run Log, Results, and Labeler tabs. It runs the same orchestrator in a background thread with cancel support and queue-based log streaming. The LabelerPanel offers LabelMe-compatible manual annotation for HUMAN_REVIEW cases, completing the loop from automated segmentation to human correction.",
+      "nodeIds": [
+        "file:src/ui/review_app.py",
+        "file:src/ui/labeler.py",
+        "file:src/ui/_helpers.py"
+      ]
+    },
+    {
+      "order": 12,
+      "title": "Architecture Specification",
+      "description": "The agent-spec document is the authoritative design reference for everything you've toured: data model definitions, multi-agent chatroom protocol, orchestrator flow diagrams, tools layer responsibilities, and the phased implementation plan. Cross-reference it with the code to see how design intent maps to the modules in src/, and use the exploration notebook for ad-hoc SAM3 and QA experiments outside the main pipeline.",
+      "nodeIds": [
+        "document:docs/agent-spec.md",
+        "file:notebooks/exploration.ipynb"
+      ]
+    }
+  ]
+}

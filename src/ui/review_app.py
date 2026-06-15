@@ -19,6 +19,7 @@ from src.core.config_loader import load_project_config
 from src.core.logging_utils import setup_logging
 from src.core.orchestrator import list_image_paths, run_orchestrator
 from src.tools.prompt_interpreter import interpret_prompt
+from src.tools.video_extractor import VIDEO_SUFFIXES as _VIDEO_EXTS, extract_frames
 from src.ui._helpers import (
     IMAGE_EXTS,
     attach_tooltip,
@@ -112,15 +113,14 @@ class AnnotatorGUI:
         )
         self.dataset_path = tk.StringVar(value=self.settings.get("dataset_path", ""))
         self.output_path = tk.StringVar(value=self.settings.get("output_path", ""))
-        self.prompt_var = tk.StringVar(value=self.settings.get("prompt", ""))
+        self.class_label_var = tk.StringVar(value=self.settings.get("class_label", ""))
+        self.sam3_prompt_var = tk.StringVar(value=self.settings.get("sam3_prompt", ""))
         self.workers_var = tk.IntVar(value=int(self.settings.get("workers", 1)))
         self.max_retries_var = tk.IntVar(value=int(self.settings.get("max_retries", 2)))
         self.theme_name = tk.StringVar(value=self.settings.get("theme", "light"))
         self.filter_var = tk.StringVar(value="All")
         self.search_var = tk.StringVar(value="")
         self.recent: List[str] = _load_recent()
-        prompt_hist = load_json(PROMPT_HISTORY_FILE)
-        self.prompt_history: List[str] = prompt_hist if isinstance(prompt_hist, list) else []
 
         self.log_queue: "queue.Queue[tuple]" = queue.Queue(maxsize=5000)
         self.worker_thread: Optional[threading.Thread] = None
@@ -128,6 +128,8 @@ class AnnotatorGUI:
         self.total_images = 0
         self.processed = 0
         self.last_output_path: Optional[Path] = None
+        self.last_bundles: Optional[List[AnnotationBundle]] = None
+        self.last_config: Optional[ProjectConfig] = None
         self._bundle_status: Dict[str, str] = {}
         self._label_files: Dict[str, Path] = {}
         self._classes: List[str] = []
@@ -256,16 +258,19 @@ class AnnotatorGUI:
         self.setup_tab = ttk.Frame(notebook)
         self.log_tab = ttk.Frame(notebook)
         self.results_tab = ttk.Frame(notebook)
+        self.video_tab = ttk.Frame(notebook)
         self.labeler_tab = ttk.Frame(notebook)
         notebook.add(self.setup_tab, text="Setup")
         notebook.add(self.log_tab, text="Run Log")
         notebook.add(self.results_tab, text="Results")
+        notebook.add(self.video_tab, text="Video \u2192 Frames")
         notebook.add(self.labeler_tab, text="Labeler")
         self.notebook = notebook
 
         self._build_setup_tab()
         self._build_log_tab()
         self._build_results_tab()
+        self._build_video_tab()
         self._build_labeler_tab()
 
         # Status bar
@@ -324,16 +329,19 @@ class AnnotatorGUI:
         ttk.Entry(frm, textvariable=self.output_path, width=78).grid(row=row, column=1, sticky="we")
         ttk.Button(frm, text="Browse...", command=self._pick_output).grid(row=row, column=2, padx=6)
 
+
+
         row += 1
-        ttk.Label(frm, text="Prompt (optional):").grid(row=row, column=0, sticky="w", pady=4)
-        prompt_entry = ttk.Combobox(
-            frm, textvariable=self.prompt_var, width=78,
-            values=self.prompt_history,
-        )
-        prompt_entry.grid(row=row, column=1, sticky="we")
-        attach_tooltip(prompt_entry, 'Natural language; e.g. "tanks" or "annotate cars and people"')
-        ttk.Label(frm, text='recent ▼', style="Muted.TLabel").grid(row=row, column=2, sticky="w", padx=6)
-        self.prompt_combo = prompt_entry
+        ttk.Label(frm, text="Class Label:").grid(row=row, column=0, sticky="w", pady=4)
+        class_entry = ttk.Entry(frm, textvariable=self.class_label_var, width=78)
+        class_entry.grid(row=row, column=1, sticky="we")
+        attach_tooltip(class_entry, "Target classes (e.g. box or person, car)")
+
+        row += 1
+        ttk.Label(frm, text="SAM3 Text Prompt:").grid(row=row, column=0, sticky="w", pady=4)
+        sam3_entry = ttk.Entry(frm, textvariable=self.sam3_prompt_var, width=78)
+        sam3_entry.grid(row=row, column=1, sticky="we")
+        attach_tooltip(sam3_entry, "Text prompt for SAM3 (e.g. metal silver color box)")
 
         row += 1
         opts = ttk.LabelFrame(frm, text="Pipeline options", padding=8)
@@ -390,12 +398,16 @@ class AnnotatorGUI:
         btns.pack(fill="x", pady=(0, 6))
         self.open_out_btn = ttk.Button(btns, text="Open output folder", command=self._open_output, state="disabled")
         self.open_out_btn.pack(side="left")
+        self.load_results_btn = ttk.Button(btns, text="Load Results", command=self._load_previous_results, state="normal")
+        self.load_results_btn.pack(side="left", padx=6)
         self.open_yolo_btn = ttk.Button(btns, text="Open YOLO labels", command=self._open_yolo, state="disabled")
         self.open_yolo_btn.pack(side="left", padx=6)
         self.save_preview_btn = ttk.Button(btns, text="Save preview PNG", command=self._save_preview, state="disabled")
         self.save_preview_btn.pack(side="left", padx=6)
         self.export_all_btn = ttk.Button(btns, text="Export all previews", command=self._export_all_previews, state="disabled")
         self.export_all_btn.pack(side="left", padx=6)
+        self.export_yolo_all_btn = ttk.Button(btns, text="Force export all to YOLO", command=self._export_all_to_yolo, state="normal")
+        self.export_yolo_all_btn.pack(side="left", padx=6)
         ttk.Button(btns, text="Toggle theme", command=self._toggle_theme).pack(side="right")
 
         paned = ttk.PanedWindow(frm, orient="horizontal")
@@ -422,6 +434,8 @@ class AnnotatorGUI:
         search_entry = ttk.Entry(controls, textvariable=self.search_var, width=20)
         search_entry.pack(side="left", padx=(4, 0))
         search_entry.bind("<KeyRelease>", lambda e: self._refresh_labels_list())
+        self.accept_btn = ttk.Button(controls, text="✓ Accept Annotation", command=self._accept_selected_annotation, state="disabled")
+        self.accept_btn.pack(side="left", padx=(12, 0))
 
         labels_row = ttk.Frame(right)
         labels_row.pack(fill="both", expand=True)
@@ -493,6 +507,9 @@ class AnnotatorGUI:
             text = "\n".join(lines)
 
             def _apply() -> None:
+                # Race guard: skip if user picked a different folder while we scanned
+                if self.dataset_path.get().strip() != path:
+                    return
                 self.preview_text.delete("1.0", "end")
                 self.preview_text.insert("end", text)
                 self.status_var.set(
@@ -545,6 +562,8 @@ class AnnotatorGUI:
         threading.Thread(target=_worker, daemon=True).start()
 
     def _after_recursive(self, folder: str, paths: list) -> None:
+        if self.dataset_path.get().strip() != folder:
+            return  # user moved on
         self.status_var.set(f"Recursive scan: {len(paths)} image(s) under {folder}")
         block = [f"\nRecursive image count: {len(paths)}"]
         block.extend(f"  {p}" for p in paths[:30])
@@ -580,6 +599,17 @@ class AnnotatorGUI:
                     self.total_images = n
                     self.processed = 0
                     self.progress.configure(maximum=max(n, 1), value=0)
+                except Exception:  # noqa: BLE001
+                    pass
+            elif "Done " in msg and "]" in msg:
+                try:
+                    # Parse current index from "[cur/total] Done img_..."
+                    parts = msg.split("]", 1)[0]
+                    if parts.startswith("[") and "/" in parts:
+                        cur = int(parts[1:].split("/")[0])
+                        self.processed = cur
+                        self.progress.configure(value=cur)
+                        self.status_var.set(f"Running... ({cur}/{self.total_images})")
                 except Exception:  # noqa: BLE001
                     pass
             drained += 1
@@ -636,7 +666,6 @@ class AnnotatorGUI:
         cfg_path = resolve_path(Path(self.config_path.get()))
         dataset_override = self.dataset_path.get().strip()
         output_override = self.output_path.get().strip()
-        prompt = self.prompt_var.get().strip()
         workers = max(1, int(self.workers_var.get()))
         max_retries = max(0, int(self.max_retries_var.get()))
 
@@ -663,20 +692,31 @@ class AnnotatorGUI:
             if not preview_paths:
                 raise RuntimeError("No images found. Supported: .jpg .jpeg .png .bmp .webp")
 
-            if prompt:
-                plan = interpret_prompt(prompt, fallback_schema=config.label_schema)
-                if plan.classes:
-                    config.label_schema = plan.classes
-                config.per_class_prompt = plan.per_class_prompt
-                config.user_prompt = plan.raw_input
-                self.log_queue.put(("INFO", "SYSTEM", f"Prompt classes: {plan.classes}"))
-                # Save prompt to history (dedup, cap 12)
-                if prompt in self.prompt_history:
-                    self.prompt_history.remove(prompt)
-                self.prompt_history.insert(0, prompt)
-                self.prompt_history = self.prompt_history[:12]
-                save_json(PROMPT_HISTORY_FILE, self.prompt_history)
-                self.root.after(0, lambda: self.prompt_combo.configure(values=self.prompt_history))
+            classes_raw = self.class_label_var.get().strip()
+            prompts_raw = self.sam3_prompt_var.get().strip()
+
+            if classes_raw:
+                import re
+                manual_classes = [c.strip() for c in re.split(r",", classes_raw) if c.strip()]
+                manual_prompts = [p.strip() for p in re.split(r",", prompts_raw) if p.strip()]
+                
+                config.label_schema = manual_classes
+                config.per_class_prompt = {}
+                for i, cls in enumerate(manual_classes):
+                    if i < len(manual_prompts):
+                        config.per_class_prompt[cls] = manual_prompts[i]
+                    else:
+                        config.per_class_prompt[cls] = cls
+                config.user_prompt = f"Manual: {classes_raw}"
+            else:
+                # Fallback to config schema if empty
+                config.user_prompt = "Default config schema"
+
+            import json
+            self.log_queue.put(("INFO", "SYSTEM", f"Class Label: {json.dumps(config.label_schema)}"))
+            for cls in config.label_schema:
+                prompt_text = config.per_class_prompt.get(cls, cls)
+                self.log_queue.put(("INFO", "SYSTEM", f"SAM3 Text Prompt: \"{prompt_text}\""))
 
             config.output_path.mkdir(parents=True, exist_ok=True)
             setup_logging(config.output_path / "logs", level=logging.INFO)
@@ -689,6 +729,8 @@ class AnnotatorGUI:
 
             try:
                 bundles = run_orchestrator(config, cancel_event=self.cancel_event)
+                self.last_bundles = bundles
+                self.last_config = config
                 accepted = sum(1 for b in bundles if b.status == "ACCEPTED")
                 hr = sum(1 for b in bundles if b.status == "HUMAN_REVIEW")
                 self._bundle_status = {b.image.path.stem: b.status for b in bundles}
@@ -717,18 +759,22 @@ class AnnotatorGUI:
             self.open_out_btn.configure(state="normal")
             self.open_yolo_btn.configure(state="normal")
             self.export_all_btn.configure(state="normal")
+            self.export_yolo_all_btn.configure(state="normal")
             self._load_labels_list()
         self.notebook.select(self.results_tab)
 
     # ---------- labels viewer ----------
     def _load_labels_list(self) -> None:
         self._label_files = {}
-        self._classes = []
         if not self.last_output_path:
+            self._classes = []
             return
         classes_file = self.last_output_path / "classes.txt"
         if classes_file.exists():
             self._classes = classes_file.read_text(encoding="utf-8").splitlines()
+        elif self.last_config and self.last_config.label_schema:
+            self._classes = list(self.last_config.label_schema)
+
         labels_dir = None
         for cand in ("yolo_seg_labels", "yolo_labels"):
             d = self.last_output_path / cand
@@ -766,6 +812,14 @@ class AnnotatorGUI:
         entry = self.labels_listbox.get(sel[0])
         # strip "badge  [N]  " prefix
         stem = entry.split("  ", 2)[-1].strip()
+
+        # Enable or disable accept button depending on status
+        status = self._bundle_status.get(stem, "?")
+        if status == "HUMAN_REVIEW":
+            self.accept_btn.configure(state="normal")
+        else:
+            self.accept_btn.configure(state="disabled")
+
         lf = self._label_files.get(stem)
         if not lf:
             return
@@ -980,6 +1034,299 @@ class AnnotatorGUI:
         self.status_var.set(f"Exported {count} preview image(s) to {out_dir}")
         open_in_explorer(out_dir)
 
+    def _rebuild_bundles_from_logs(self, out_dir: Path, dataset_dir: Path) -> tuple[List[AnnotationBundle], Optional[List[str]]]:
+        from src.core.models import AnnotationBundle, MaskRecord, ConversationMessage, QAResult
+        from src.core.orchestrator import discover_images
+
+        logs_file = out_dir / "conversation_logs.json"
+        if not logs_file.exists():
+            raise FileNotFoundError(f"No conversation_logs.json found in output folder:\n{out_dir}")
+
+        images = discover_images(dataset_dir)
+        img_map = {im.id: im for im in images}
+        logs_data = json.loads(logs_file.read_text(encoding="utf-8"))
+
+        log_label_schema = None
+        try:
+            for entry in logs_data:
+                for msg in entry.get("history", []):
+                    for action in msg.get("actions", []):
+                        if action.get("type") == "REQUEST_ANNOTATION" and "classes" in action:
+                            log_label_schema = action["classes"]
+                            break
+                    if log_label_schema:
+                        break
+                if log_label_schema:
+                    break
+        except Exception:
+            pass
+
+        rebuilt_bundles = []
+        for entry in logs_data:
+            img_id = entry.get("image_id")
+            status = entry.get("status", "HUMAN_REVIEW")
+            retry_count = entry.get("retry_count", 0)
+
+            im_record = img_map.get(img_id)
+            if not im_record:
+                continue
+
+            qa_res = None
+            if entry.get("qa_result"):
+                try:
+                    qa_res = QAResult.model_validate(entry["qa_result"])
+                except Exception:
+                    pass
+
+            bundle = AnnotationBundle(
+                image=im_record,
+                status=status,
+                retry_count=retry_count,
+                qa_result=qa_res
+            )
+
+            # Reconstruct history
+            history_messages = []
+            for h_dict in entry.get("history", []):
+                try:
+                    history_messages.append(ConversationMessage.model_validate(h_dict))
+                except Exception:
+                    pass
+            bundle.history = history_messages
+
+            # Reconstruct masks from history
+            masks = []
+            history = entry.get("history", [])
+            for msg in reversed(history):
+                actions = msg.get("actions", [])
+                ar_action = next((a for a in actions if a.get("type") == "ANNOTATION_RESULT"), None)
+                if ar_action and "masks" in ar_action:
+                    for m_dict in ar_action["masks"]:
+                        try:
+                            masks.append(MaskRecord.model_validate(m_dict))
+                        except Exception:
+                            pass
+                    break
+            bundle.masks = masks
+            rebuilt_bundles.append(bundle)
+
+        return rebuilt_bundles, log_label_schema
+
+    def _load_previous_results(self) -> None:
+        out_dir = Path(self.output_path.get().strip() or "")
+        dataset_dir = Path(self.dataset_path.get().strip() or "")
+
+        if not out_dir.exists():
+            messagebox.showerror("Folder not found", "Output folder does not exist.")
+            return
+        if not dataset_dir.exists():
+            messagebox.showerror("Folder not found", "Dataset folder does not exist.")
+            return
+
+        logs_file = out_dir / "conversation_logs.json"
+        if not logs_file.exists():
+            messagebox.showwarning("No logs", f"No conversation_logs.json found in output folder:\n{out_dir}")
+            return
+
+        self.status_var.set("Loading previous results from conversation_logs.json...")
+        self.root.update_idletasks()
+
+        try:
+            bundles, log_label_schema = self._rebuild_bundles_from_logs(out_dir, dataset_dir)
+            self.last_bundles = bundles
+            self._bundle_status = {b.image.path.stem: b.status for b in bundles}
+            self.last_output_path = out_dir
+
+            if log_label_schema:
+                self._classes = log_label_schema
+
+            # Load project config fallback/load
+            cfg_path = Path(self.config_path.get().strip())
+            try:
+                config = load_project_config(resolve_path(cfg_path))
+            except Exception:
+                from src.core.models import ProjectConfig
+                config = ProjectConfig(
+                    project_name="sam3_auto_annotation_lab",
+                    dataset_path=dataset_dir,
+                    output_path=out_dir,
+                    label_schema=self._classes or ["box"],
+                    yolo_segmentation=True
+                )
+            if log_label_schema:
+                config.label_schema = log_label_schema
+            self.last_config = config
+
+            # Enable buttons since we loaded the results
+            self.open_out_btn.configure(state="normal")
+            self.open_yolo_btn.configure(state="normal")
+            self.export_all_btn.configure(state="normal")
+            self.export_yolo_all_btn.configure(state="normal")
+
+            # Load labels list
+            self._load_labels_list()
+
+            # Read qa summary report if exists
+            qa_file = out_dir / "qa_report.json"
+            summary_text = ""
+            if qa_file.exists():
+                try:
+                    summary_text = json.dumps(json.loads(qa_file.read_text(encoding="utf-8")), indent=2)
+                except Exception:
+                    pass
+            self.summary_text.delete("1.0", "end")
+            if summary_text:
+                self.summary_text.insert("end", summary_text)
+            else:
+                accepted = sum(1 for b in bundles if b.status == "ACCEPTED")
+                hr = sum(1 for b in bundles if b.status == "HUMAN_REVIEW")
+                self.summary_text.insert("end", f"Loaded from logs:\nTotal: {len(bundles)}\nAccepted: {accepted}\nHuman Review: {hr}")
+
+            self.status_var.set(f"Successfully loaded {len(bundles)} results from logs.")
+            messagebox.showinfo("Success", f"Successfully loaded {len(bundles)} images from logs.")
+        except Exception as exc:
+            self.status_var.set(f"Failed to load results: {exc}")
+            messagebox.showerror("Error loading results", f"Could not parse log file: {exc}")
+
+    def _accept_selected_annotation(self) -> None:
+        sel = self.labels_listbox.curselection()
+        if not sel:
+            return
+        entry = self.labels_listbox.get(sel[0])
+        stem = entry.split("  ", 2)[-1].strip()
+
+        if not self.last_bundles:
+            return
+
+        bundle = next((b for b in self.last_bundles if b.image.path.stem == stem), None)
+        if not bundle:
+            messagebox.showerror("Error", f"Could not find matching image bundle for '{stem}'.")
+            return
+
+        # Change status to ACCEPTED
+        bundle.status = "ACCEPTED"
+        self._bundle_status[stem] = "ACCEPTED"
+
+        # Save conversation_logs.json
+        if self.last_output_path:
+            try:
+                from src.core.orchestrator import _export_conversation_logs
+                slim = True
+                if self.last_config:
+                    slim = self.last_config.slim_conversation_logs
+                _export_conversation_logs(self.last_bundles, self.last_output_path, slim=slim)
+            except Exception as exc:
+                messagebox.showerror("Error updating logs", f"Could not save changes to logs: {exc}")
+                return
+
+            # quiet YOLO export to keep output directory in sync
+            try:
+                from src.tools.yolo.exporter import export_yolo
+                label_schema = self._classes
+                if self.last_config:
+                    label_schema = self.last_config.label_schema
+                
+                export_yolo(
+                    self.last_bundles,
+                    self.last_output_path,
+                    label_schema=label_schema,
+                    segmentation=self.last_config.yolo_segmentation if self.last_config else True,
+                    force_all=True,
+                )
+            except Exception as exc:
+                messagebox.showwarning("Warning", f"Could not export updated labels to YOLO files: {exc}")
+
+        # Refresh listbox and maintain selection
+        self._refresh_labels_list()
+
+        # Find the new index of the stem in the listbox and reselect it
+        for i in range(self.labels_listbox.size()):
+            lbl_entry = self.labels_listbox.get(i)
+            lbl_stem = lbl_entry.split("  ", 2)[-1].strip()
+            if lbl_stem == stem:
+                self.labels_listbox.selection_clear(0, "end")
+                self.labels_listbox.selection_set(i)
+                self.labels_listbox.activate(i)
+                self._on_label_select()
+                break
+
+    def _export_all_to_yolo(self) -> None:
+        cfg_path = Path(self.config_path.get().strip())
+        out_dir = Path(self.output_path.get().strip() or "")
+        dataset_dir = Path(self.dataset_path.get().strip() or "")
+
+        if not out_dir.exists() or not dataset_dir.exists():
+            messagebox.showerror("Folder not found", "Dataset or Output folder does not exist.")
+            return
+
+        try:
+            config = load_project_config(resolve_path(cfg_path))
+        except Exception:
+            from src.core.models import ProjectConfig
+            config = ProjectConfig(
+                project_name="sam3_auto_annotation_lab",
+                dataset_path=dataset_dir,
+                output_path=out_dir,
+                label_schema=self._classes or ["box"],
+                yolo_segmentation=True
+            )
+
+        bundles = None
+        log_label_schema = None
+        if self.last_bundles:
+            bundles = self.last_bundles
+            if self.last_config:
+                log_label_schema = self.last_config.label_schema
+        else:
+            logs_file = out_dir / "conversation_logs.json"
+            if not logs_file.exists():
+                messagebox.showwarning("No logs", f"No conversation_logs.json found in output folder:\n{out_dir}")
+                return
+
+            self.status_var.set("Rebuilding bundles from conversation_logs.json...")
+            self.root.update_idletasks()
+
+            try:
+                bundles, log_label_schema = self._rebuild_bundles_from_logs(out_dir, dataset_dir)
+            except Exception as exc:
+                messagebox.showerror("Error reading logs", f"Could not parse log file: {exc}")
+                return
+
+        if log_label_schema:
+            config.label_schema = log_label_schema
+
+        if not bundles:
+            messagebox.showwarning("No annotations", "No images have generated masks to export.")
+            return
+
+        annotated_bundles = [b for b in bundles if b.masks]
+        if not annotated_bundles:
+            messagebox.showwarning("No annotations", "No images have generated masks to export.")
+            return
+
+        try:
+            from src.tools.yolo.exporter import export_yolo
+            labels_dir = export_yolo(
+                bundles,
+                out_dir,
+                label_schema=config.label_schema,
+                segmentation=config.yolo_segmentation,
+                force_all=True,
+            )
+            self.last_output_path = out_dir
+            self.open_out_btn.configure(state="normal")
+            self.open_yolo_btn.configure(state="normal")
+            self.export_all_btn.configure(state="normal")
+            self._load_labels_list()
+            self.status_var.set(f"Exported {len(annotated_bundles)} annotated image(s) to YOLO format.")
+            messagebox.showinfo(
+                "Export complete",
+                f"Successfully exported {len(annotated_bundles)} annotated image(s) "
+                f"(including HUMAN_REVIEW) to:\n{labels_dir}"
+            )
+        except Exception as exc:
+            messagebox.showerror("Export failed", str(exc))
+
     # ---------- shortcuts ----------
     def _open_output(self) -> None:
         if self.last_output_path:
@@ -995,6 +1342,247 @@ class AnnotatorGUI:
                 return
         open_in_explorer(self.last_output_path)
 
+    # ---------- Video -> Frames tab ----------
+    def _build_video_tab(self) -> None:
+        frm = ttk.Frame(self.video_tab, padding=12)
+        frm.pack(fill="both", expand=True)
+
+        ttk.Label(frm, text="Video \u2192 Frames Extractor", style="Header.TLabel").grid(
+            row=0, column=0, columnspan=4, sticky="w", pady=(0, 4)
+        )
+        ttk.Label(
+            frm,
+            text="Load up to 3 videos, set how many frames you want from each, and extract.",
+            style="Muted.TLabel",
+        ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 12))
+
+        # --- Video slots ---
+        self._video_slots: list[dict] = []
+        video_exts_str = " ".join(f"*{e}" for e in sorted(_VIDEO_EXTS))
+        for slot_idx in range(3):
+            row = 2 + slot_idx * 2
+            ttk.Label(frm, text=f"Video {slot_idx + 1}:").grid(row=row, column=0, sticky="w", pady=4)
+            path_var = tk.StringVar()
+            path_entry = ttk.Entry(frm, textvariable=path_var, width=62)
+            path_entry.grid(row=row, column=1, sticky="we", padx=(4, 0))
+
+            def _browse(var=path_var) -> None:
+                p = filedialog.askopenfilename(
+                    title="Select video file",
+                    filetypes=[("Video files", video_exts_str), ("All", "*.*")],
+                )
+                if p:
+                    var.set(p)
+
+            ttk.Button(frm, text="Browse...", command=_browse).grid(row=row, column=2, padx=6)
+
+            ttk.Label(frm, text="Frames:").grid(row=row, column=3, sticky="w", padx=(8, 0))
+            frames_var = tk.IntVar(value=100)
+            frames_spin = ttk.Spinbox(frm, from_=1, to=99999, textvariable=frames_var, width=8)
+            frames_spin.grid(row=row, column=4, padx=(4, 0))
+            attach_tooltip(frames_spin, "Number of evenly-spaced frames to extract")
+
+            # Info label below each slot
+            info_var = tk.StringVar(value="")
+            ttk.Label(frm, textvariable=info_var, style="Muted.TLabel").grid(
+                row=row + 1, column=1, columnspan=4, sticky="w", padx=(4, 0)
+            )
+
+            self._video_slots.append({
+                "path_var": path_var,
+                "frames_var": frames_var,
+                "info_var": info_var,
+            })
+
+        # --- Output folder ---
+        out_row = 2 + 3 * 2
+        ttk.Label(frm, text="Output folder:").grid(row=out_row, column=0, sticky="w", pady=(12, 4))
+        self._video_output_var = tk.StringVar()
+        ttk.Entry(frm, textvariable=self._video_output_var, width=62).grid(
+            row=out_row, column=1, sticky="we", padx=(4, 0), pady=(12, 4)
+        )
+        ttk.Button(frm, text="Browse...", command=self._pick_video_output).grid(
+            row=out_row, column=2, padx=6, pady=(12, 4)
+        )
+
+        # --- Actions row ---
+        action_row = out_row + 1
+        actions = ttk.Frame(frm)
+        actions.grid(row=action_row, column=0, columnspan=5, sticky="we", pady=(12, 8))
+
+        self._video_extract_btn = ttk.Button(
+            actions, text="\u25B6 Extract Frames", style="Accent.TButton",
+            command=self._run_video_extraction,
+        )
+        self._video_extract_btn.pack(side="left")
+
+        self._video_open_btn = ttk.Button(
+            actions, text="Open output folder", command=self._open_video_output, state="disabled",
+        )
+        self._video_open_btn.pack(side="left", padx=(8, 0))
+
+        self._video_use_btn = ttk.Button(
+            actions, text="Use as dataset \u2192 Setup tab",
+            command=self._use_video_frames_as_dataset, state="disabled",
+        )
+        self._video_use_btn.pack(side="left", padx=(8, 0))
+
+        # --- Progress ---
+        prog_row = action_row + 1
+        self._video_progress = ttk.Progressbar(frm, mode="determinate", length=400)
+        self._video_progress.grid(row=prog_row, column=0, columnspan=5, sticky="we", pady=(4, 4))
+
+        self._video_status_var = tk.StringVar(value="Ready. Add videos and click Extract.")
+        ttk.Label(frm, textvariable=self._video_status_var).grid(
+            row=prog_row + 1, column=0, columnspan=5, sticky="w"
+        )
+
+        # --- Extraction log ---
+        log_row = prog_row + 2
+        ttk.Label(frm, text="Extraction log:", style="Muted.TLabel").grid(
+            row=log_row, column=0, columnspan=5, sticky="w", pady=(8, 0)
+        )
+        self._video_log = scrolledtext.ScrolledText(frm, wrap="word", height=10, font=("Consolas", 9))
+        self._video_log.grid(row=log_row + 1, column=0, columnspan=5, sticky="nsew", pady=(2, 0))
+
+        frm.columnconfigure(1, weight=1)
+        frm.rowconfigure(log_row + 1, weight=1)
+
+        self._video_worker: Optional[threading.Thread] = None
+
+    def _pick_video_output(self) -> None:
+        path = filedialog.askdirectory(title="Select output folder for extracted frames")
+        if path:
+            self._video_output_var.set(path)
+
+    def _open_video_output(self) -> None:
+        folder = self._video_output_var.get().strip()
+        if folder and Path(folder).exists():
+            open_in_explorer(Path(folder))
+
+    def _use_video_frames_as_dataset(self) -> None:
+        folder = self._video_output_var.get().strip()
+        if folder:
+            self.dataset_path.set(folder)
+            self.notebook.select(self.setup_tab)
+            self.status_var.set(f"Dataset path set to extracted frames: {folder}")
+
+    def _video_log_append(self, msg: str) -> None:
+        self._video_log.insert("end", msg + "\n")
+        self._video_log.see("end")
+
+    def _run_video_extraction(self) -> None:
+        if self._video_worker is not None and self._video_worker.is_alive():
+            messagebox.showwarning("Busy", "Extraction already running.")
+            return
+
+        # Collect jobs
+        jobs: list[tuple[Path, int]] = []
+        for slot in self._video_slots:
+            vpath = slot["path_var"].get().strip()
+            if not vpath:
+                continue
+            p = Path(vpath)
+            if not p.exists():
+                messagebox.showerror("File not found", f"Video not found: {vpath}")
+                return
+            if p.suffix.lower() not in _VIDEO_EXTS:
+                messagebox.showwarning(
+                    "Unsupported format",
+                    f"{p.name} is not a recognized video format.\n"
+                    f"Supported: {', '.join(sorted(_VIDEO_EXTS))}",
+                )
+                return
+            try:
+                n = int(slot["frames_var"].get())
+            except (ValueError, tk.TclError):
+                n = 100
+            if n < 1:
+                n = 1
+            jobs.append((p, n))
+
+        if not jobs:
+            messagebox.showwarning("No videos", "Add at least one video file.")
+            return
+
+        out = self._video_output_var.get().strip()
+        if not out:
+            messagebox.showwarning("No output", "Pick an output folder first.")
+            return
+        output_dir = Path(out)
+
+        # Reset UI
+        self._video_log.delete("1.0", "end")
+        total_frames = sum(n for _, n in jobs)
+        self._video_progress.configure(maximum=max(total_frames, 1), value=0)
+        self._video_extract_btn.configure(state="disabled")
+        self._video_status_var.set("Extracting...")
+
+        for slot in self._video_slots:
+            slot["info_var"].set("")
+
+        def _worker() -> None:
+            global_done = 0
+            all_saved = 0
+            try:
+                for job_idx, (vpath, num) in enumerate(jobs):
+                    sub_dir = output_dir / vpath.stem if len(jobs) > 1 else output_dir
+
+                    def _progress(cur: int, tot: int, msg: str) -> None:
+                        val = global_done + cur
+                        self.root.after(0, lambda v=val, m=msg: (
+                            self._video_progress.configure(value=v),
+                            self._video_status_var.set(m),
+                        ))
+
+                    self.root.after(0, lambda idx=job_idx, v=vpath: self._video_log_append(
+                        f"\n{'='*50}\nProcessing: {v.name}  ({num} frames requested)\n{'='*50}"
+                    ))
+
+                    result = extract_frames(
+                        vpath, sub_dir, num,
+                        callback=_progress,
+                    )
+
+                    global_done += result.saved_frames
+                    all_saved += result.saved_frames
+
+                    # Update slot info
+                    info = (
+                        f"\u2713 {result.saved_frames} frames saved | "
+                        f"Video: {result.total_video_frames} frames, "
+                        f"{result.fps:.1f} fps, {result.duration_secs:.1f}s"
+                    )
+                    if result.error:
+                        info = f"\u2717 Error: {result.error}"
+
+                    self.root.after(0, lambda idx=job_idx, i=info: (
+                        self._video_slots[idx]["info_var"].set(i),
+                        self._video_log_append(i),
+                    ))
+
+                summary = f"Done! Extracted {all_saved} total frames to {output_dir}"
+                self.root.after(0, lambda: (
+                    self._video_status_var.set(summary),
+                    self._video_log_append(f"\n{summary}"),
+                    self._video_progress.configure(value=self._video_progress["maximum"]),
+                    self._video_extract_btn.configure(state="normal"),
+                    self._video_open_btn.configure(state="normal"),
+                    self._video_use_btn.configure(state="normal"),
+                ))
+
+            except Exception as exc:  # noqa: BLE001
+                msg = str(exc)
+                self.root.after(0, lambda m=msg: (
+                    messagebox.showerror("Extraction failed", m),
+                    self._video_status_var.set(f"Error: {m}"),
+                    self._video_log_append(f"ERROR: {m}"),
+                    self._video_extract_btn.configure(state="normal"),
+                ))
+
+        self._video_worker = threading.Thread(target=_worker, daemon=True)
+        self._video_worker.start()
+
     def _on_close(self) -> None:
         # Persist settings
         try:
@@ -1002,7 +1590,8 @@ class AnnotatorGUI:
                 "config_path": self.config_path.get(),
                 "dataset_path": self.dataset_path.get(),
                 "output_path": self.output_path.get(),
-                "prompt": self.prompt_var.get(),
+                "class_label": self.class_label_var.get(),
+                "sam3_prompt": self.sam3_prompt_var.get(),
                 "workers": self.workers_var.get(),
                 "max_retries": self.max_retries_var.get(),
                 "theme": self.theme_name.get(),
