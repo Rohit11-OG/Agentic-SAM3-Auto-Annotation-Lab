@@ -72,3 +72,37 @@ def test_orchestrator_end_to_end(tmp_path: Path) -> None:
     classes_file = config.output_path / "classes.txt"
     assert classes_file.exists()
     assert classes_file.read_text(encoding="utf-8").splitlines() == ["person", "car"]
+
+
+def test_orchestrator_custom_prompt(tmp_path: Path) -> None:
+    images_dir = tmp_path / "images"
+    images_dir.mkdir()
+    Image.new("RGB", (320, 240), (50, 60, 70)).save(images_dir / "img_a.jpg")
+
+    cfg_file = tmp_path / "cfg.yaml"
+    cfg_file.write_text(
+        f"project_name: t\n"
+        f"dataset_path: {images_dir.as_posix()}\n"
+        f"output_path: {(tmp_path / 'out').as_posix()}\n"
+        "label_schema: [person, car]\n"
+        "sam3: {model_name: sam3_b, backend: mock}\n"
+        "qa: {max_retries: 2, min_mask_area: 0.0, max_mask_area: 0.95, "
+        "iou_threshold: 0.95, confidence_threshold: 0.0}\n"
+        "llm: {}\n"
+        "human_review: {}\n"
+        "max_workers: 1\n",
+        encoding="utf-8",
+    )
+    config = load_project_config(cfg_file)
+    from src.tools.prompt_interpreter import interpret_prompt
+    plan = interpret_prompt("there is a metal box in silver color so annotate it")
+    config.user_prompt = plan.raw_input
+    config.label_schema = plan.classes
+    config.per_class_prompt = plan.per_class_prompt
+
+    bundles = run_orchestrator(config)
+    assert len(bundles) == 1
+    assert config.label_schema == ["box"]
+    classes_file = config.output_path / "classes.txt"
+    assert classes_file.exists()
+    assert classes_file.read_text(encoding="utf-8").splitlines() == ["box"]
