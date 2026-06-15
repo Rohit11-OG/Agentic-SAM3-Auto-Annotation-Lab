@@ -325,7 +325,11 @@ def run_orchestrator(
 
     bundles: List[AnnotationBundle] = [AnnotationBundle(image=image, status="NEW") for image in images]
 
+    _progress_lock = threading.Lock()
+    _progress_count = 0
+
     def _process(bundle: AnnotationBundle) -> AnnotationBundle:
+        nonlocal _progress_count
         if cancel_event is not None and cancel_event.is_set():
             bundle.status = "HUMAN_REVIEW"
             bundle.history.append(
@@ -338,7 +342,24 @@ def run_orchestrator(
                 )
             )
             return bundle
-        return run_bundle_conversation(bundle, config, coordinator, sam3_agent, curation_agent)
+
+        with _progress_lock:
+            _progress_count += 1
+            idx = _progress_count
+        LOGGER.info(
+            "[%d/%d] Processing %s — %s",
+            idx, len(bundles), bundle.image.id, bundle.image.path.name,
+        )
+
+        result = run_bundle_conversation(bundle, config, coordinator, sam3_agent, curation_agent)
+
+        mask_count = len(result.masks)
+        LOGGER.info(
+            "[%d/%d] Done %s — %s  masks=%d  retries=%d",
+            idx, len(bundles), result.image.id, result.status,
+            mask_count, result.retry_count,
+        )
+        return result
 
     if config.max_workers > 1 and len(bundles) > 1:
         with ThreadPoolExecutor(max_workers=config.max_workers) as pool:
