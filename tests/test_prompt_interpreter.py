@@ -35,3 +35,19 @@ def test_per_class_prompt_built() -> None:
     # SAM3 prefers single-word prompts
     assert plan.per_class_prompt.get("car") == "car"
     assert plan.per_class_prompt.get("dog") == "dog"
+
+
+def test_modifier_backtracking_and_typos() -> None:
+    plan = interpret_prompt("there is a metal \"box\" in silver color so anootate it")
+    assert plan.classes == ["box"]
+    assert plan.per_class_prompt["box"] == "metal silver color box"
+
+    plan2 = interpret_prompt("metal box in silver color")
+    assert plan2.classes == ["box"]
+    assert plan2.per_class_prompt["box"] == "metal silver color box"
+
+
+def test_custom_singularization() -> None:
+    plan = interpret_prompt("find widgets and boxes")
+    assert "widget" in plan.classes
+    assert "box" in plan.classes
