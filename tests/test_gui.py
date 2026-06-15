@@ -434,6 +434,31 @@ def test_load_and_accept_results_flow(gui, tmp_path: Path, monkeypatch) -> None:
     assert yolo_file.exists()
     assert yolo_file.read_text(encoding="utf-8").strip() != ""
 
+    # Check that LabelMe JSON was written
+    labelme_file = out_dir / "labelme_json" / "test_frame.json"
+    assert labelme_file.exists()
+    lm_data = json.loads(labelme_file.read_text(encoding="utf-8"))
+    assert lm_data["version"] == "5.4.1"
+    assert len(lm_data["shapes"]) == 1
+    assert lm_data["shapes"][0]["label"] == "box"
+    assert lm_data["shapes"][0]["shape_type"] == "polygon"
+    assert lm_data["imagePath"] == "test_frame.jpg"
+
+    # Check that image files are co-located next to label files in output
+    yolo_img = out_dir / "yolo_seg_labels" / "test_frame.jpg"
+    labelme_img = out_dir / "labelme_json" / "test_frame.jpg"
+    assert yolo_img.exists()
+    assert labelme_img.exists()
+
+    # Simulate deleting the source image from dataset, and verify label/copied image are deleted on next sync
+    img_path.unlink()
+    from src.tools.labelme import export_labelme
+    export_labelme(gui.last_bundles, out_dir, force_all=True)
+    
+    # The label JSON file and the copied image should now be deleted because the source image was deleted
+    assert not labelme_file.exists()
+    assert not labelme_img.exists()
+
 
 def test_load_and_accept_all_warnings_flow(gui, tmp_path: Path, monkeypatch) -> None:
     # Set up folders
@@ -535,3 +560,87 @@ def test_load_and_accept_all_warnings_flow(gui, tmp_path: Path, monkeypatch) -> 
     yolo_file = out_dir / "yolo_seg_labels" / "test_frame.txt"
     assert yolo_file.exists()
     assert yolo_file.read_text(encoding="utf-8").strip() != ""
+
+    # Check that LabelMe JSON was written
+    labelme_file = out_dir / "labelme_json" / "test_frame.json"
+    assert labelme_file.exists()
+    lm_data = json.loads(labelme_file.read_text(encoding="utf-8"))
+    assert lm_data["version"] == "5.4.1"
+    assert len(lm_data["shapes"]) == 1
+    assert lm_data["shapes"][0]["label"] == "box"
+    assert lm_data["shapes"][0]["shape_type"] == "polygon"
+    assert lm_data["imagePath"] == "test_frame.jpg"
+
+
+def test_load_results_fallback_yolo_segmentation_detection(gui, tmp_path: Path, monkeypatch) -> None:
+    dataset_dir = tmp_path / "dataset"
+    dataset_dir.mkdir()
+    out_dir = tmp_path / "output"
+    out_dir.mkdir()
+
+    # Case A: yolo_labels directory exists (bounding-box format)
+    (out_dir / "yolo_labels").mkdir()
+    
+    logs_file = out_dir / "conversation_logs.json"
+    logs_file.write_text(json.dumps([]), encoding="utf-8")
+    
+    gui.dataset_path.set(str(dataset_dir))
+    gui.output_path.set(str(out_dir))
+    gui.config_path.set("nonexistent_config.yaml") # force fallback config
+    
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda a, b: None)
+    
+    gui._load_previous_results()
+    assert gui.last_config is not None
+    assert gui.last_config.yolo_segmentation is False
+
+    # Case B: yolo_seg_labels directory exists
+    (out_dir / "yolo_labels").rmdir()
+    (out_dir / "yolo_seg_labels").mkdir()
+    
+    gui._load_previous_results()
+    assert gui.last_config.yolo_segmentation is True
+
+
+def test_gui_custom_prompts_blank_class_label(gui, tmp_path: Path, monkeypatch) -> None:
+    dataset_dir = tmp_path / "dataset"
+    dataset_dir.mkdir()
+    out_dir = tmp_path / "output"
+    out_dir.mkdir()
+    
+    # Create dummy image
+    img = dataset_dir / "a.jpg"
+    img.write_bytes(b"")
+    
+    # Write a basic config
+    cfg_file = tmp_path / "cfg.yaml"
+    cfg_file.write_text(
+        f"project_name: t\n"
+        f"dataset_path: {dataset_dir.as_posix()}\n"
+        f"output_path: {out_dir.as_posix()}\n"
+        "label_schema: [person, car]\n"
+        "sam3: {model_name: sam3_b, backend: mock}\n"
+        "qa: {max_retries: 2, min_mask_area: 0.0, max_mask_area: 0.95, "
+        "iou_threshold: 0.95, confidence_threshold: 0.0}\n"
+        "llm: {}\n"
+        "human_review: {}\n"
+        "max_workers: 1\n",
+        encoding="utf-8",
+    )
+    
+    gui.config_path.set(str(cfg_file))
+    gui.dataset_path.set(str(dataset_dir))
+    gui.output_path.set(str(out_dir))
+    
+    # Empty Class Label but custom SAM3 prompt
+    gui.class_label_var.set("")
+    gui.sam3_prompt_var.set("police officer, red vehicle")
+    
+    # Run _do_run directly on current thread
+    gui._do_run()
+    
+    # Verify custom prompts mapped to default classes
+    assert gui.last_config.label_schema == ["person", "car"]
+    assert gui.last_config.per_class_prompt["person"] == "police officer"
+    assert gui.last_config.per_class_prompt["car"] == "red vehicle"
+

@@ -257,4 +257,12 @@ def sam3_segment_exemplar_prompt(
             else:
                 raise
 
+    if backend == "hf_local":
+        if not params.get("allow_mock_fallback", True):
+            raise RuntimeError("hf_local backend does not support exemplar (bounding box) prompting.")
+        warnings.warn(
+            "SAM3 hf_local backend does not support exemplar prompting; falling back to mock backend.",
+            stacklevel=2,
+        )
+
     return _mock_exemplar_prompt(exemplar_bbox, params)
