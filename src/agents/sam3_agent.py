@@ -4,7 +4,11 @@ from typing import Any, Dict, List
 
 from src.agents.base_agent import BaseAgent
 from src.core.models import AnnotationBundle, ConversationMessage, MaskRecord, new_mask_id
-from src.tools.sam3 import sam3_segment_exemplar_prompt, sam3_segment_text_prompt
+from src.tools.sam3 import (
+    sam3_segment_exemplar_prompt,
+    sam3_segment_text_prompt,
+    sam3_segment_text_prompts_multi,
+)
 
 
 class SAM3Agent(BaseAgent):
@@ -38,31 +42,65 @@ class SAM3Agent(BaseAgent):
         per_class_prompt: Dict[str, str] = request.get("per_class_prompt", {}) or {}
         version = bundle.retry_count + 1
 
-        generated_masks: List[MaskRecord] = []
+        # Separate exemplar-mode classes (each needs its own bbox) from text-mode
+        text_classes: List[str] = []
+        exemplar_classes: List[str] = []
         for class_name in classes:
+            class_hints = hints.get(class_name, {})
+            mode = class_hints.get("mode", "text_prompt")
+            if mode == "exemplar" and class_hints.get("exemplar_bbox"):
+                exemplar_classes.append(class_name)
+            else:
+                text_classes.append(class_name)
+
+        generated_masks: List[MaskRecord] = []
+
+        # Multi-class text prompts -> single-session call (saves image encoding)
+        if text_classes:
+            class_prompts = [
+                (cls, per_class_prompt.get(cls, cls)) for cls in text_classes
+            ]
+            # Per-class hints currently only affect retry; merge once for the batch
+            merged_params = {**self.default_params}
+            if bundle.retry_count > 0:
+                merged_params.setdefault("retry_mode", True)
+                merged_params.setdefault("retry_seed_bump", bundle.retry_count)
+
+            batch = sam3_segment_text_prompts_multi(
+                image_path=bundle.image.path,
+                class_prompts=class_prompts,
+                model_name=self.model_name,
+                params=merged_params,
+            )
+            for class_name in text_classes:
+                for raw in batch.get(class_name, []):
+                    generated_masks.append(
+                        MaskRecord(
+                            mask_id=new_mask_id(),
+                            image_id=bundle.image.id,
+                            class_id=class_name,
+                            polygon=raw.polygon,
+                            bbox=raw.bbox,
+                            area=raw.area,
+                            confidence=raw.confidence,
+                            source="sam3",
+                            version=version,
+                        )
+                    )
+
+        # Exemplar prompts: still per-class
+        for class_name in exemplar_classes:
             class_hints = hints.get(class_name, {})
             params = {**self.default_params, **class_hints}
             if bundle.retry_count > 0:
                 params.setdefault("retry_mode", True)
                 params.setdefault("retry_seed_bump", bundle.retry_count)
-            mode = class_hints.get("mode", "text_prompt")
-
-            if mode == "exemplar" and class_hints.get("exemplar_bbox"):
-                raw_masks = sam3_segment_exemplar_prompt(
-                    image_path=bundle.image.path,
-                    exemplar_bbox=tuple(class_hints["exemplar_bbox"]),
-                    model_name=self.model_name,
-                    params=params,
-                )
-            else:
-                prompt_text = per_class_prompt.get(class_name, class_name)
-                raw_masks = sam3_segment_text_prompt(
-                    image_path=bundle.image.path,
-                    class_name=prompt_text,
-                    model_name=self.model_name,
-                    params=params,
-                )
-
+            raw_masks = sam3_segment_exemplar_prompt(
+                image_path=bundle.image.path,
+                exemplar_bbox=tuple(class_hints["exemplar_bbox"]),
+                model_name=self.model_name,
+                params=params,
+            )
             for raw in raw_masks:
                 generated_masks.append(
                     MaskRecord(
