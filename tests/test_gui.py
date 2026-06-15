@@ -19,6 +19,7 @@ from src.ui.review_app import AnnotatorGUI, _QueueHandler
 
 @pytest.fixture
 def root():
+    import gc
     try:
         r = tk.Tk()
     except tk.TclError:
@@ -26,9 +27,20 @@ def root():
     r.withdraw()
     yield r
     try:
+        for child in list(r.children.values()):
+            try:
+                child.destroy()
+            except Exception:
+                pass
         r.destroy()
     except Exception:
         pass
+    # Reset Tk's default-root cache so the next test can create a fresh Tk()
+    try:
+        tk._default_root = None  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    gc.collect()
 
 
 @pytest.fixture

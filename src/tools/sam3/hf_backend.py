@@ -155,6 +155,81 @@ def _mask_to_detection(
     )
 
 
+def segment_text_prompts_multi(
+    image_path: Path,
+    class_prompts: List[Tuple[str, str]],
+    model_name: str,
+    params: Dict[str, Any],
+) -> Dict[str, List[_Detection]]:
+    """Run several text prompts on one image inside a single SAM3 session.
+
+    Saves the cost of re-encoding the image per class. Returns a dict
+    class_id -> list of detections.
+    """
+    repo_id = params.get("hf_repo_id") or model_name or "facebook/sam3"
+    model, processor, device, dtype = _load_model(repo_id, params)
+
+    try:
+        import torch  # type: ignore
+        from PIL import Image  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("PIL/torch required") from exc
+
+    key = str(image_path)
+    with _IMG_LOCK:
+        cached = _LAST_IMG.get(key)
+    if cached is not None:
+        image = cached
+    else:
+        image = Image.open(image_path).convert("RGB")
+        with _IMG_LOCK:
+            _LAST_IMG[key] = image
+            _LAST_IMG_PATH.append(key)
+            while len(_LAST_IMG_PATH) > 2:
+                old = _LAST_IMG_PATH.pop(0)
+                _LAST_IMG.pop(old, None)
+
+    image_size = image.size
+    threshold = float(params.get("hf_score_threshold", 0.4))
+
+    session = processor.init_video_session(
+        video=[image],
+        inference_device=device,
+        dtype=dtype,
+    )
+
+    results: Dict[str, List[_Detection]] = {}
+    with torch.no_grad():
+        for class_id, prompt_text in class_prompts:
+            try:
+                session.reset_tracking_data()
+            except Exception:  # noqa: BLE001
+                pass
+            processor.add_text_prompt(session, text=str(prompt_text))
+            class_dets: List[_Detection] = []
+            for out in model.propagate_in_video_iterator(session):
+                obj_ids = list(getattr(out, "object_ids", []))
+                suppressed = set(getattr(out, "suppressed_obj_ids", []) or [])
+                removed = set(getattr(out, "removed_obj_ids", []) or [])
+                obj_to_mask = getattr(out, "obj_id_to_mask", {}) or {}
+                obj_to_score = getattr(out, "obj_id_to_score", {}) or {}
+                for oid in obj_ids:
+                    if oid in suppressed or oid in removed:
+                        continue
+                    score = float(obj_to_score.get(oid, 0.5))
+                    if score < threshold:
+                        continue
+                    mask = obj_to_mask.get(oid)
+                    if mask is None:
+                        continue
+                    det = _mask_to_detection(mask, score, target_size=image_size)
+                    if det is not None:
+                        class_dets.append(det)
+                break  # single-frame only
+            results[class_id] = class_dets
+    return results
+
+
 def segment_text_prompt(
     image_path: Path,
     class_name: str,
