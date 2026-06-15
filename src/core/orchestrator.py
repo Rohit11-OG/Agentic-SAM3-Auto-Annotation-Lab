@@ -15,6 +15,7 @@ from src.agents.sam3_agent import SAM3Agent
 from src.core.models import AnnotationBundle, ConversationMessage, ImageRecord, MaskRecord, ProjectConfig, QAResult
 from src.tools.captioning import caption_image
 from src.tools.yolo import export_yolo
+from src.tools.labelme import export_labelme
 
 LOGGER = logging.getLogger(__name__)
 
@@ -376,6 +377,10 @@ def run_orchestrator(
         config.output_path,
         label_schema=config.label_schema,
         segmentation=config.yolo_segmentation,
+    )
+    export_labelme(
+        bundles,
+        config.output_path,
     )
     _export_conversation_logs(bundles, config.output_path, slim=config.slim_conversation_logs)
     _export_qa_report(bundles, config.output_path, config.label_schema)
