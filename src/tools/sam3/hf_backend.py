@@ -21,6 +21,10 @@ _IMG_LOCK = threading.Lock()
 _LAST_IMG: Dict[str, Any] = {}  # path -> PIL.Image (decoded RGB), keep only most recent
 _LAST_IMG_PATH: List[str] = []  # FIFO of paths cached; cap at 2
 
+# Image-only model (for box/point prompts) is separate from the video model
+_IMAGE_MODEL_LOCK = threading.Lock()
+_IMAGE_MODEL_CACHE: Dict[str, Tuple[Any, Any, str, Any]] = {}
+
 
 @dataclass
 class _Detection:
@@ -294,3 +298,115 @@ def segment_text_prompt(
                 break  # single-frame only
 
     return detections
+
+
+def _load_image_model(repo_id: str, params: Dict[str, Any]) -> Tuple[Any, Any, str, Any]:
+    """Load the image-only Sam3 model + processor (separate from video flow)."""
+    cache_key = f"{repo_id}|{params.get('local_dir') or ''}|{params.get('device') or 'auto'}"
+    cached = _IMAGE_MODEL_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    with _IMAGE_MODEL_LOCK:
+        cached = _IMAGE_MODEL_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            import torch  # type: ignore
+            from transformers.models.sam3.processing_sam3 import Sam3Processor  # type: ignore
+            from transformers.models.sam3.modeling_sam3 import Sam3Model  # type: ignore
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                "Install: pip install torch torchvision transformers accelerate"
+            ) from exc
+
+        device = _resolve_device(params.get("device"))
+        dtype = torch.float16 if device.startswith("cuda") else torch.float32
+        local_dir = params.get("local_dir")
+        source = local_dir if local_dir else repo_id
+        if bool(local_dir):
+            import os as _os
+            _os.environ.setdefault("HF_HUB_OFFLINE", "1")
+            _os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
+        LOGGER.info("Loading SAM3 image model from %s (device=%s)", source, device)
+        processor = Sam3Processor.from_pretrained(source, local_files_only=bool(local_dir))
+        try:
+            model = Sam3Model.from_pretrained(source, dtype=dtype, local_files_only=bool(local_dir))
+        except TypeError:
+            model = Sam3Model.from_pretrained(source, torch_dtype=dtype, local_files_only=bool(local_dir))
+        model.to(device).eval()
+        _IMAGE_MODEL_CACHE[cache_key] = (model, processor, device, dtype)
+        return _IMAGE_MODEL_CACHE[cache_key]
+
+
+def segment_box_prompt(
+    image_path: Path,
+    box: Tuple[int, int, int, int],
+    class_name: str,
+    model_name: str,
+    params: Dict[str, Any],
+) -> List[_Detection]:
+    """Segment an object inside a user-drawn bounding box. Returns top-1 mask.
+
+    `box` is (x1, y1, x2, y2) in image pixel coordinates.
+    `class_name` provides the SAM3 text hint that narrows the proposal set.
+    """
+    repo_id = params.get("hf_repo_id") or model_name or "facebook/sam3"
+    model, processor, device, dtype = _load_image_model(repo_id, params)
+
+    try:
+        import torch  # type: ignore
+        from PIL import Image  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("PIL/torch required") from exc
+
+    key = str(image_path)
+    with _IMG_LOCK:
+        cached = _LAST_IMG.get(key)
+    if cached is not None:
+        image = cached
+    else:
+        image = Image.open(image_path).convert("RGB")
+        with _IMG_LOCK:
+            _LAST_IMG[key] = image
+            _LAST_IMG_PATH.append(key)
+            while len(_LAST_IMG_PATH) > 2:
+                old = _LAST_IMG_PATH.pop(0)
+                _LAST_IMG.pop(old, None)
+
+    image_size = image.size  # (W, H)
+    x1, y1, x2, y2 = box
+    x1, x2 = sorted([int(x1), int(x2)])
+    y1, y2 = sorted([int(y1), int(y2)])
+
+    inputs = processor(
+        images=image,
+        text=str(class_name or "object"),
+        input_boxes=[[[x1, y1, x2, y2]]],
+        return_tensors="pt",
+    ).to(device)
+    # Cast float tensors to model dtype (fp16 on CUDA)
+    for k in list(inputs.keys()):
+        v = inputs[k]
+        if hasattr(v, "dtype") and v.dtype == torch.float32:
+            inputs[k] = v.to(dtype)
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+
+    pred_masks = getattr(outputs, "pred_masks", None)
+    if pred_masks is None:
+        return []
+    # Shape: (batch, N_proposals, H_mask, W_mask). Pick the one with highest mean activation.
+    pm = pred_masks[0]  # (N, H, W)
+    # Score each by sum of positive activations (a cheap quality proxy)
+    scores = pm.float().sum(dim=(-2, -1))
+    best_idx = int(torch.argmax(scores).item())
+    best_mask = pm[best_idx]
+    # Normalise score into [0,1] using sigmoid on raw mean activation as a confidence proxy
+    raw_score = float(scores[best_idx].item())
+    norm = float(torch.sigmoid(torch.tensor(raw_score / (best_mask.numel() or 1))).item())
+
+    det = _mask_to_detection(best_mask, confidence=norm, target_size=image_size)
+    return [det] if det is not None else []

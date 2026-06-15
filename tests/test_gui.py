@@ -656,3 +656,107 @@ def test_gui_custom_prompts_blank_class_label(gui, tmp_path: Path, monkeypatch) 
     assert gui.last_config.per_class_prompt["person"] == "police officer"
     assert gui.last_config.per_class_prompt["car"] == "red vehicle"
 
+
+
+# ---------- Dashboard tab ----------
+def test_dashboard_tab_present(gui) -> None:
+    assert hasattr(gui, "dashboard_tab")
+    assert hasattr(gui, "dash_card_vars")
+    assert "total" in gui.dash_card_vars
+    assert "accept_rate" in gui.dash_card_vars
+
+
+def test_dashboard_refresh_no_output(gui) -> None:
+    gui.last_output_path = None
+    gui.output_path.set("")
+    gui._refresh_dashboard()
+    # All cards should reset to placeholder
+    for v in gui.dash_card_vars.values():
+        assert v.get() == "—"
+
+
+def test_dashboard_refresh_with_qa_report(gui, tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    out.mkdir()
+    (out / "qa_report.json").write_text(json.dumps({
+        "total_images": 10,
+        "status_counts": {"ACCEPTED": 8, "HUMAN_REVIEW": 2},
+        "accept_rate": 0.8,
+        "retries_total": 3,
+        "avg_mask_confidence": 0.74,
+        "per_class_mask_counts": {"car": 12, "person": 5, "dog": 2},
+        "top_issues": [["car too small", 4], ["person low confidence", 2]],
+    }), encoding="utf-8")
+    gui.last_output_path = out
+    gui._refresh_dashboard()
+    assert gui.dash_card_vars["total"].get() == "10"
+    assert gui.dash_card_vars["accepted"].get() == "8"
+    assert gui.dash_card_vars["human_review"].get() == "2"
+    assert gui.dash_card_vars["accept_rate"].get() == "80%"
+    assert gui.dash_card_vars["avg_conf"].get() == "0.74"
+    assert gui.dash_card_vars["retries"].get() == "3"
+    chart_text = gui.dash_chart.get("1.0", "end")
+    assert "car" in chart_text and "person" in chart_text
+    issues_text = gui.dash_issues.get("1.0", "end")
+    assert "car too small" in issues_text
+
+
+# ---------- Global toolbar ----------
+def test_global_toolbar_buttons_present(gui) -> None:
+    assert hasattr(gui, "tb_run_btn")
+    assert hasattr(gui, "tb_cancel_btn")
+    assert str(gui.tb_run_btn["state"]) == "normal"
+    assert str(gui.tb_cancel_btn["state"]) == "disabled"
+
+
+def test_set_running_toggles_both_toolbars(gui) -> None:
+    gui._set_running(True)
+    assert str(gui.run_btn["state"]) == "disabled"
+    assert str(gui.cancel_btn["state"]) == "normal"
+    assert str(gui.tb_run_btn["state"]) == "disabled"
+    assert str(gui.tb_cancel_btn["state"]) == "normal"
+    gui._set_running(False)
+    assert str(gui.run_btn["state"]) == "normal"
+    assert str(gui.cancel_btn["state"]) == "disabled"
+    assert str(gui.tb_run_btn["state"]) == "normal"
+    assert str(gui.tb_cancel_btn["state"]) == "disabled"
+
+
+# ---------- _resolve_output_dir fallback chain ----------
+def test_resolve_output_dir_prefers_last(gui, tmp_path: Path) -> None:
+    p = tmp_path / "out"
+    p.mkdir()
+    gui.last_output_path = p
+    gui.output_path.set("")
+    assert gui._resolve_output_dir() == p
+
+
+def test_resolve_output_dir_falls_back_to_field(gui, tmp_path: Path) -> None:
+    p = tmp_path / "field_out"
+    p.mkdir()
+    gui.last_output_path = None
+    gui.output_path.set(str(p))
+    assert gui._resolve_output_dir() == p
+
+
+def test_resolve_output_dir_none_when_nothing(gui) -> None:
+    gui.last_output_path = None
+    gui.output_path.set("")
+    assert gui._resolve_output_dir() is None
+
+
+# ---------- GPU widget ----------
+def test_gpu_widget_string_set(gui) -> None:
+    # Should be either GPU info or "CPU only" — never empty after first refresh
+    val = gui.gpu_var.get()
+    assert val == "CPU only" or val.startswith("GPU") or val == ""
+
+
+# ---------- Hotkey help dialog ----------
+def test_hotkey_help_opens_and_closes(gui) -> None:
+    gui._show_hotkey_help()
+    gui.root.update()
+    # Find the Toplevel just created
+    tops = [w for w in gui.root.winfo_children() if isinstance(w, tk.Toplevel)]
+    assert tops, "help dialog Toplevel not found"
+    tops[-1].destroy()
