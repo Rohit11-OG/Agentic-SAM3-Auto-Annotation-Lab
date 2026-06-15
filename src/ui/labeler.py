@@ -137,6 +137,9 @@ class LabelerPanel(ttk.Frame):
         self.btn_edit = ttk.Button(toolbar, text="✥ Edit", width=8,
                                    command=lambda: self._set_mode("edit"))
         self.btn_edit.pack(side="left", padx=2)
+        self.btn_sam = ttk.Button(toolbar, text="🎯 SAM", width=8,
+                                  command=lambda: self._set_mode("sam_box"))
+        self.btn_sam.pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
 
         ttk.Button(toolbar, text="↶ Undo", width=8, command=self._undo).pack(side="left", padx=2)
@@ -223,6 +226,7 @@ class LabelerPanel(ttk.Frame):
             w.bind("<w>", lambda e: self._set_mode("rectangle"))
             w.bind("<y>", lambda e: self._set_mode("polygon"))
             w.bind("<e>", lambda e: self._set_mode("edit"))
+            w.bind("<b>", lambda e: self._set_mode("sam_box"))
             w.bind("<Escape>", lambda e: self._cancel_draft())
             w.bind("<Delete>", lambda e: self._delete_selected_shape())
             w.bind("<Control-s>", lambda e: self._save_json())
@@ -236,15 +240,26 @@ class LabelerPanel(ttk.Frame):
         self._cancel_draft()
         self._sel_shape_idx = None
         self._sel_vertex_idx = None
-        cursor_map = {"rectangle": "crosshair", "polygon": "crosshair", "edit": "hand2"}
+        cursor_map = {
+            "rectangle": "crosshair",
+            "polygon": "crosshair",
+            "edit": "hand2",
+            "sam_box": "plus",
+        }
         self.canvas.configure(cursor=cursor_map.get(m, "arrow"))
         self._update_mode_buttons()
         self._render()
-        self.status_var.set(f"Mode: {m}")
+        hint = "drag box → SAM3 returns a mask" if m == "sam_box" else f"Mode: {m}"
+        self.status_var.set(hint)
 
     def _update_mode_buttons(self) -> None:
         # Visual hint by relief
-        for btn, m in ((self.btn_rect, "rectangle"), (self.btn_poly, "polygon"), (self.btn_edit, "edit")):
+        for btn, m in (
+            (self.btn_rect, "rectangle"),
+            (self.btn_poly, "polygon"),
+            (self.btn_edit, "edit"),
+            (self.btn_sam, "sam_box"),
+        ):
             try:
                 if self.mode.get() == m:
                     btn.state(["pressed"])
@@ -550,7 +565,7 @@ class LabelerPanel(ttk.Frame):
             return
 
         img_x, img_y = self._canvas_to_image(e.x, e.y)
-        if self.mode.get() == "rectangle":
+        if self.mode.get() in ("rectangle", "sam_box"):
             self._draft_points = [(img_x, img_y)]
             self._rect_start_canvas = (e.x, e.y)
         else:  # polygon
@@ -566,7 +581,7 @@ class LabelerPanel(ttk.Frame):
         if self.mode.get() == "edit" and self._dragging_vertex:
             self._update_dragged_vertex(e.x, e.y)
             return
-        if self.mode.get() == "rectangle" and self._rect_start_canvas is not None:
+        if self.mode.get() in ("rectangle", "sam_box") and self._rect_start_canvas is not None:
             self.canvas.delete("rect_preview")
             sx, sy = self._rect_start_canvas
             color = _color_for(self.current_class.get())
@@ -581,7 +596,7 @@ class LabelerPanel(ttk.Frame):
             self._dragging_vertex = False
             self.dirty = True
             return
-        if self.mode.get() == "rectangle" and self._rect_start_canvas is not None:
+        if self.mode.get() in ("rectangle", "sam_box") and self._rect_start_canvas is not None:
             sx, sy = self._rect_start_canvas
             if abs(e.x - sx) < 3 and abs(e.y - sy) < 3:
                 self._rect_start_canvas = None
@@ -592,15 +607,20 @@ class LabelerPanel(ttk.Frame):
             ix2, iy2 = self._canvas_to_image(e.x, e.y)
             x_min, x_max = sorted([ix1, ix2])
             y_min, y_max = sorted([iy1, iy2])
-            self._snapshot()
-            self.shapes.append(_Shape("rectangle", self.current_class.get(),
-                                     [(x_min, y_min), (x_max, y_max)]))
+
+            if self.mode.get() == "sam_box":
+                self._run_sam_box(int(x_min), int(y_min), int(x_max), int(y_max))
+            else:
+                self._snapshot()
+                self.shapes.append(_Shape("rectangle", self.current_class.get(),
+                                         [(x_min, y_min), (x_max, y_max)]))
+                self._refresh_shape_list()
+                self.dirty = True
+                self._update_counts()
+
             self._rect_start_canvas = None
             self._draft_points = []
-            self.dirty = True
-            self._refresh_shape_list()
             self._render()
-            self._update_counts()
 
     def _on_right_click(self, _e=None) -> None:
         self._finish_polygon()
@@ -764,6 +784,76 @@ class LabelerPanel(ttk.Frame):
             messagebox.showerror("Save failed", str(exc))
 
     # ---------- auto-annotate ----------
+    # ---------- SAM-assist (box prompt) ----------
+    def _run_sam_box(self, x1: int, y1: int, x2: int, y2: int) -> None:
+        if self.current_image_path is None:
+            return
+        cls = self.current_class.get().strip() or "object"
+        self.status_var.set(f"SAM3 box-prompt for '{cls}' on box ({x1},{y1})-({x2},{y2})...")
+        cfg_path = self._get_config()
+        target_image = self.current_image_path
+
+        def _worker() -> None:
+            try:
+                from src.core.config_loader import load_project_config
+                from src.tools.sam3 import sam3_segment_box_prompt
+
+                params: Dict[str, Any] = {}
+                try:
+                    if cfg_path and Path(cfg_path).exists():
+                        cfg = load_project_config(Path(cfg_path))
+                        params = dict(cfg.sam3_params)
+                except Exception:  # noqa: BLE001
+                    pass
+
+                model_name = params.get("model_name", "sam3_b")
+                raw = sam3_segment_box_prompt(
+                    image_path=target_image,
+                    box=(x1, y1, x2, y2),
+                    class_name=cls,
+                    model_name=model_name,
+                    params=params,
+                )
+
+                new_shapes: List[_Shape] = []
+                for r in raw:
+                    if r.polygon and len(r.polygon) >= 3:
+                        new_shapes.append(_Shape("polygon", cls,
+                                                 [(float(x), float(y)) for x, y in r.polygon]))
+                    else:
+                        bx, by, bw, bh = r.bbox
+                        new_shapes.append(_Shape("rectangle", cls,
+                                                 [(float(bx), float(by)),
+                                                  (float(bx + bw), float(by + bh))]))
+
+                def _apply() -> None:
+                    if self.current_image_path != target_image:
+                        self.status_var.set("SAM3 box result discarded (image changed).")
+                        return
+                    if new_shapes:
+                        self._snapshot()
+                        self.shapes.extend(new_shapes)
+                        if cls not in self.classes:
+                            self.classes.append(cls)
+                            self.class_combo.configure(values=self.classes)
+                            self._refresh_label_list()
+                        self.dirty = True
+                        self._refresh_shape_list()
+                        self._render()
+                        self._update_counts()
+                        self.status_var.set(
+                            f"SAM3 added {len(new_shapes)} shape(s) for '{cls}' (mode: SAM box)."
+                        )
+                    else:
+                        self.status_var.set("SAM3 returned no mask for that box.")
+
+                self.after(0, _apply)
+            except Exception as exc:  # noqa: BLE001
+                msg = str(exc)
+                self.after(0, lambda m=msg: messagebox.showerror("SAM3 box-prompt failed", m))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
     def _auto_annotate(self) -> None:
         if self.current_image_path is None:
             return
