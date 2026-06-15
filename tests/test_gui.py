@@ -6,7 +6,6 @@ Uses a withdrawn Tk root so no window appears. Skips if tk unavailable.
 from __future__ import annotations
 
 import json
-import threading
 import tkinter as tk
 from pathlib import Path
 
@@ -66,7 +65,7 @@ def test_load_json_missing_returns_empty(tmp_path: Path) -> None:
 
 # ---------- AnnotatorGUI structure ----------
 def test_gui_builds(gui) -> None:
-    assert int(gui.notebook.index("end")) == 4  # 4 tabs
+    assert int(gui.notebook.index("end")) == 5  # 5 tabs (Setup, Run Log, Results, Video→Frames, Labeler)
     assert str(gui.run_btn["state"]) == "normal"
     assert str(gui.cancel_btn["state"]) == "disabled"
     assert "labels_listbox" in dir(gui)
@@ -333,3 +332,206 @@ def test_polygon_classes_in_color_map() -> None:
     from src.ui._helpers import PALETTE
     for cls in ("car", "tank", "dog"):
         assert color_for(cls) in PALETTE
+
+
+def test_load_and_accept_results_flow(gui, tmp_path: Path, monkeypatch) -> None:
+    # Set up folders
+    dataset_dir = tmp_path / "dataset"
+    dataset_dir.mkdir()
+    out_dir = tmp_path / "output"
+    out_dir.mkdir()
+
+    # Create dummy image
+    img_path = dataset_dir / "test_frame.jpg"
+    img_path.write_bytes(b"")
+
+    # Create conversation_logs.json
+    logs_data = [{
+        "image_id": "img_00000",
+        "status": "HUMAN_REVIEW",
+        "retry_count": 1,
+        "qa_result": None,
+        "history": [
+            {
+                "sender": "agent",
+                "role": "agent",
+                "content": "Requested annotation",
+                "actions": [{"type": "REQUEST_ANNOTATION", "classes": ["box"]}],
+                "timestamp": "2026-06-15T10:00:00Z"
+            },
+            {
+                "sender": "agent",
+                "role": "agent",
+                "content": "Result",
+                "actions": [{
+                    "type": "ANNOTATION_RESULT",
+                    "masks": [{
+                        "mask_id": "mask-123",
+                        "image_id": "img_00000",
+                        "class_id": "box",
+                        "bbox": [10, 20, 30, 40],
+                        "polygon": [[10, 20], [40, 20], [40, 60], [10, 60]],
+                        "area": 1200.0,
+                        "confidence": 0.95
+                    }]
+                }],
+                "timestamp": "2026-06-15T10:01:00Z"
+            }
+        ]
+    }]
+    logs_file = out_dir / "conversation_logs.json"
+    logs_file.write_text(json.dumps(logs_data), encoding="utf-8")
+
+    # Set GUI fields
+    gui.dataset_path.set(str(dataset_dir))
+    gui.output_path.set(str(out_dir))
+
+    # Mock messagebox to avoid popups during test
+    mock_shown = []
+    def mock_showinfo(title, msg):
+        mock_shown.append(("info", title, msg))
+    def mock_showwarning(title, msg):
+        mock_shown.append(("warning", title, msg))
+    def mock_showerror(title, msg):
+        mock_shown.append(("error", title, msg))
+
+    monkeypatch.setattr("tkinter.messagebox.showinfo", mock_showinfo)
+    monkeypatch.setattr("tkinter.messagebox.showwarning", mock_showwarning)
+    monkeypatch.setattr("tkinter.messagebox.showerror", mock_showerror)
+
+    # 1. Load results
+    gui._load_previous_results()
+
+    assert gui.last_bundles is not None
+    assert len(gui.last_bundles) == 1
+    assert gui.last_bundles[0].status == "HUMAN_REVIEW"
+    assert gui._bundle_status["test_frame"] == "HUMAN_REVIEW"
+    assert gui._classes == ["box"]
+
+    # 2. Verify listbox populates and selects
+    gui.labels_listbox.insert("end", "⚠  [ 1]  test_frame")
+    gui.labels_listbox.selection_set(0)
+
+    # Trigger select callback manually
+    gui._on_label_select()
+    # Accept button should be enabled since status is HUMAN_REVIEW
+    assert str(gui.accept_btn.cget("state")) == "normal"
+
+    # 3. Accept annotation
+    gui._accept_selected_annotation()
+
+    # Should update status to ACCEPTED
+    assert gui.last_bundles[0].status == "ACCEPTED"
+    assert gui._bundle_status["test_frame"] == "ACCEPTED"
+
+    # Should rewrite logs
+    logs_text = logs_file.read_text(encoding="utf-8")
+    updated_logs = json.loads(logs_text)
+    assert updated_logs[0]["status"] == "ACCEPTED"
+
+    # Check that YOLO label file was updated/written
+    yolo_file = out_dir / "yolo_seg_labels" / "test_frame.txt"
+    assert yolo_file.exists()
+    assert yolo_file.read_text(encoding="utf-8").strip() != ""
+
+
+def test_load_and_accept_all_warnings_flow(gui, tmp_path: Path, monkeypatch) -> None:
+    # Set up folders
+    dataset_dir = tmp_path / "dataset"
+    dataset_dir.mkdir()
+    out_dir = tmp_path / "output"
+    out_dir.mkdir()
+
+    # Create dummy image
+    img_path = dataset_dir / "test_frame.jpg"
+    img_path.write_bytes(b"")
+
+    # Create conversation_logs.json
+    logs_data = [{
+        "image_id": "img_00000",
+        "status": "HUMAN_REVIEW",
+        "retry_count": 1,
+        "qa_result": None,
+        "history": [
+            {
+                "sender": "agent",
+                "role": "agent",
+                "content": "Requested annotation",
+                "actions": [{"type": "REQUEST_ANNOTATION", "classes": ["box"]}],
+                "timestamp": "2026-06-15T10:00:00Z"
+            },
+            {
+                "sender": "agent",
+                "role": "agent",
+                "content": "Result",
+                "actions": [{
+                    "type": "ANNOTATION_RESULT",
+                    "masks": [{
+                        "mask_id": "mask-123",
+                        "image_id": "img_00000",
+                        "class_id": "box",
+                        "bbox": [10, 20, 30, 40],
+                        "polygon": [[10, 20], [40, 20], [40, 60], [10, 60]],
+                        "area": 1200.0,
+                        "confidence": 0.95
+                    }]
+                }],
+                "timestamp": "2026-06-15T10:01:00Z"
+            }
+        ]
+    }]
+    logs_file = out_dir / "conversation_logs.json"
+    logs_file.write_text(json.dumps(logs_data), encoding="utf-8")
+
+    # Set GUI fields
+    gui.dataset_path.set(str(dataset_dir))
+    gui.output_path.set(str(out_dir))
+
+    # Mock messagebox to avoid popups during test
+    mock_shown = []
+    def mock_showinfo(title, msg):
+        mock_shown.append(("info", title, msg))
+    def mock_showwarning(title, msg):
+        mock_shown.append(("warning", title, msg))
+    def mock_showerror(title, msg):
+        mock_shown.append(("error", title, msg))
+    def mock_askyesno(title, msg):
+        mock_shown.append(("askyesno", title, msg))
+        return True
+
+    monkeypatch.setattr("tkinter.messagebox.showinfo", mock_showinfo)
+    monkeypatch.setattr("tkinter.messagebox.showwarning", mock_showwarning)
+    monkeypatch.setattr("tkinter.messagebox.showerror", mock_showerror)
+    monkeypatch.setattr("tkinter.messagebox.askyesno", mock_askyesno)
+
+    # 1. Load results
+    gui._load_previous_results()
+
+    assert gui.last_bundles is not None
+    assert len(gui.last_bundles) == 1
+    assert gui.last_bundles[0].status == "HUMAN_REVIEW"
+    assert gui._bundle_status["test_frame"] == "HUMAN_REVIEW"
+    assert gui._classes == ["box"]
+
+    # Accept All button should be enabled since status has HUMAN_REVIEW
+    assert str(gui.accept_all_btn.cget("state")) == "normal"
+
+    # 2. Bulk Accept annotation
+    gui._accept_all_warnings()
+
+    # Should update status to ACCEPTED
+    assert gui.last_bundles[0].status == "ACCEPTED"
+    assert gui._bundle_status["test_frame"] == "ACCEPTED"
+
+    # Accept All button should now be disabled since no more warnings
+    assert str(gui.accept_all_btn.cget("state")) == "disabled"
+
+    # Should rewrite logs
+    logs_text = logs_file.read_text(encoding="utf-8")
+    updated_logs = json.loads(logs_text)
+    assert updated_logs[0]["status"] == "ACCEPTED"
+
+    # Check that YOLO label file was updated/written
+    yolo_file = out_dir / "yolo_seg_labels" / "test_frame.txt"
+    assert yolo_file.exists()
+    assert yolo_file.read_text(encoding="utf-8").strip() != ""
