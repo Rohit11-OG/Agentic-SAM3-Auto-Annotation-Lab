@@ -294,7 +294,11 @@ class AnnotatorGUI:
                 body.insert("end", f"  {key:<28} {desc}\n")
         body.tag_configure("h", font=("Segoe UI", 10, "bold"))
         body.configure(state="disabled")
-        ttk.Button(frm, text="Close", command=win.destroy).pack(anchor="e", pady=(8, 0))
+        close_btn = ttk.Button(frm, text="Close", command=win.destroy)
+        close_btn.pack(anchor="e", pady=(8, 0))
+        win.bind("<Escape>", lambda _e: win.destroy())
+        win.bind("<Return>", lambda _e: win.destroy())
+        close_btn.focus_set()
 
     # ---------- dashboard ----------
     def _build_dashboard_tab(self) -> None:
@@ -410,6 +414,14 @@ class AnnotatorGUI:
         self.dash_chart.configure(state="disabled")
         self.dash_issues.configure(state="disabled")
 
+    def _on_tab_changed(self, _e=None) -> None:
+        try:
+            current = self.notebook.select()
+            if current == str(self.dashboard_tab):
+                self._refresh_dashboard()
+        except Exception:  # noqa: BLE001
+            pass
+
     # ---------- GPU widget ----------
     def _refresh_gpu_widget(self) -> None:
         try:
@@ -458,6 +470,7 @@ class AnnotatorGUI:
         notebook.add(self.video_tab, text="Video \u2192 Frames")
         notebook.add(self.labeler_tab, text="Labeler")
         self.notebook = notebook
+        notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
         self._build_dashboard_tab()
         self._build_setup_tab()
@@ -1635,19 +1648,41 @@ class AnnotatorGUI:
             messagebox.showerror("Export failed", str(exc))
 
     # ---------- shortcuts ----------
+    def _resolve_output_dir(self) -> Optional[Path]:
+        """Pick the best-known output dir: last run > current field > resolved field."""
+        if self.last_output_path and self.last_output_path.exists():
+            return self.last_output_path
+        raw = self.output_path.get().strip()
+        if raw:
+            p = Path(raw)
+            if p.exists():
+                return p
+            p2 = resolve_path(p)
+            if p2.exists():
+                return p2
+        return None
+
     def _open_output(self) -> None:
-        if self.last_output_path:
-            open_in_explorer(self.last_output_path)
+        out = self._resolve_output_dir()
+        if out is None:
+            messagebox.showinfo(
+                "No output yet",
+                "No output folder available. Run the pipeline or set an output folder.",
+            )
+            return
+        open_in_explorer(out)
 
     def _open_yolo(self) -> None:
-        if not self.last_output_path:
+        out = self._resolve_output_dir()
+        if out is None:
+            messagebox.showinfo("No output yet", "No YOLO labels yet — run the pipeline first.")
             return
         for cand in ("yolo_seg_labels", "yolo_labels"):
-            d = self.last_output_path / cand
+            d = out / cand
             if d.exists():
                 open_in_explorer(d)
                 return
-        open_in_explorer(self.last_output_path)
+        open_in_explorer(out)
 
     # ---------- Video -> Frames tab ----------
     def _build_video_tab(self) -> None:
