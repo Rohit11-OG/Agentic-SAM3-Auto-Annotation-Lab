@@ -461,7 +461,8 @@ class LabelerPanel(ttk.Frame):
         new_h = max(1, int(H * scale))
 
         # Cache the resized PhotoImage; rebuild only when zoom/canvas changes
-        state = (id(self._image_obj), new_w, new_h)
+        path_key = str(self.current_image_path) if self.current_image_path else ""
+        state = (path_key, new_w, new_h)
         if state != self._photo_state or self._photo is None:
             im_resized = self._image_obj.resize((new_w, new_h))
             self._photo = ImageTk.PhotoImage(im_resized)
