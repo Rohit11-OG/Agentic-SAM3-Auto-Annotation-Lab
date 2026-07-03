@@ -13,7 +13,7 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from src.core.config_loader import load_project_config
 from src.core.logging_utils import setup_logging
@@ -1337,7 +1337,7 @@ class AnnotatorGUI:
             badge = "✓" if status == "ACCEPTED" else ("⚠" if status == "HUMAN_REVIEW" else "·")
             try:
                 if lf is not None:
-                    lines = [l for l in lf.read_text(encoding="utf-8").splitlines() if l.strip()]
+                    lines = [line for line in lf.read_text(encoding="utf-8").splitlines() if line.strip()]
                     count = len(lines)
                 else:
                     bundle = next((b for b in self.last_bundles if b.image.path.stem == stem), None)
@@ -1433,8 +1433,10 @@ class AnnotatorGUI:
                     cx, cy, w, h = (float(x) for x in parts[1:])
                 except ValueError:
                     continue
-                x1 = int((cx - w / 2) * W); y1 = int((cy - h / 2) * H)
-                x2 = int((cx + w / 2) * W); y2 = int((cy + h / 2) * H)
+                x1 = int((cx - w / 2) * W)
+                y1 = int((cy - h / 2) * H)
+                x2 = int((cx + w / 2) * W)
+                y2 = int((cy + h / 2) * H)
                 odraw.rectangle([x1, y1, x2, y2], outline=color + (255,), width=3)
                 odraw.text((x1 + 4, max(0, y1 - 14)), cls_name, fill=color + (255,))
             elif len(parts) >= 7 and len(parts) % 2 == 1:
@@ -1576,8 +1578,10 @@ class AnnotatorGUI:
                 cls_name = self._classes[c] if 0 <= c < len(self._classes) else f"cls{c}"
                 if len(p) == 5:
                     cx, cy, w, h = map(float, p[1:])
-                    x1 = int((cx - w / 2) * W); y1 = int((cy - h / 2) * H)
-                    x2 = int((cx + w / 2) * W); y2 = int((cy + h / 2) * H)
+                    x1 = int((cx - w / 2) * W)
+                    y1 = int((cy - h / 2) * H)
+                    x2 = int((cx + w / 2) * W)
+                    y2 = int((cy + h / 2) * H)
                     od.rectangle([x1, y1, x2, y2], outline=color + (255,), width=3)
                     od.text((x1 + 4, max(0, y1 - 14)), cls_name, fill=color + (255,))
                 elif len(p) >= 7 and len(p) % 2 == 1:
@@ -2121,7 +2125,7 @@ class AnnotatorGUI:
             if lf.name == "classes.txt":
                 continue
             stem = lf.stem
-            lines = [l.strip() for l in lf.read_text(encoding="utf-8").splitlines() if l.strip()]
+            lines = [line.strip() for line in lf.read_text(encoding="utf-8").splitlines() if line.strip()]
             if not lines:
                 continue
             # Find image
@@ -2210,7 +2214,6 @@ class AnnotatorGUI:
             return
 
         out_dir = self._resolve_output_dir()
-        dataset_dir = Path(self.dataset_path.get().strip() or "")
         if not out_dir:
             messagebox.showwarning("No output folder", "Set output folder in Setup tab.")
             return
@@ -2242,9 +2245,7 @@ class AnnotatorGUI:
 
         def _worker():
             from src.tools.sam3 import sam3_segment_fewshot
-            from src.tools.yolo.exporter import export_yolo
-            from src.core.models import AnnotationBundle, ImageRecord, MaskRecord, new_mask_id, ProjectConfig
-            import time
+            from src.core.models import AnnotationBundle, ImageRecord, MaskRecord, new_mask_id
 
             # Determine labels folder name: yolo_seg_labels if segmentation, else yolo_labels
             labels_folder_name = "yolo_labels"
@@ -2356,7 +2357,7 @@ class AnnotatorGUI:
                 self._fs_run_btn.configure(state="normal")
                 self._fs_cancel_btn.configure(state="disabled")
                 self._fs_progress_var.set(100.0 if not cancelled else self._fs_progress_var.get())
-                msg = f"Cancelled. " if cancelled else ""
+                msg = "Cancelled. " if cancelled else ""
                 self._fs_status_var.set(f"{msg}Done. {written}/{total} images annotated → {labels_dir}")
                 if written > 0:
                     self._load_labels_list()  # Refresh results tab lists!
