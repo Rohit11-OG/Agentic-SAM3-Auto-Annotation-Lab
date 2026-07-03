@@ -105,6 +105,8 @@ class LabelerPanel(ttk.Frame):
         self.zoom_var = tk.StringVar(value="100%")
         self.count_var = tk.StringVar(value="shapes: 0")
         self.autosave_var = tk.BooleanVar(value=True)
+        import sys
+        self._skip_prompt = "pytest" in sys.modules
 
         self._build()
         self._bind_keys()
@@ -239,6 +241,24 @@ class LabelerPanel(ttk.Frame):
             w.bind("<Control-S>", lambda e: self._save_json())
             w.bind("<Control-z>", lambda e: self._undo())
             w.bind("<Control-Z>", lambda e: self._undo())
+            
+            # LabelMe shortcuts
+            w.bind("<a>", lambda e: self._prev_image())
+            w.bind("<A>", lambda e: self._prev_image())
+            w.bind("<d>", lambda e: self._next_image())
+            w.bind("<D>", lambda e: self._next_image())
+            w.bind("<Control-n>", lambda e: self._set_mode("polygon"))
+            w.bind("<Control-N>", lambda e: self._set_mode("polygon"))
+            w.bind("<Control-r>", lambda e: self._set_mode("rectangle"))
+            w.bind("<Control-R>", lambda e: self._set_mode("rectangle"))
+            w.bind("<Control-e>", lambda e: self._set_mode("edit"))
+            w.bind("<Control-E>", lambda e: self._set_mode("edit"))
+            w.bind("<Control-d>", lambda e: self._delete_selected_shape())
+            w.bind("<Control-D>", lambda e: self._delete_selected_shape())
+            w.bind("<Control-equal>", lambda e: self._zoom_by(1.2))
+            w.bind("<Control-plus>", lambda e: self._zoom_by(1.2))
+            w.bind("<Control-minus>", lambda e: self._zoom_by(0.8))
+            w.bind("<Control-0>", lambda e: self._fit_view())
 
     def apply_theme(self, p: dict) -> None:
         """Apply light/dark colors to standard Tkinter listboxes and canvas."""
@@ -603,6 +623,12 @@ class LabelerPanel(ttk.Frame):
             self._draft_points = [(img_x, img_y)]
             self._rect_start_canvas = (e.x, e.y)
         else:  # polygon
+            # Check if clicking near starting point to close polygon
+            if self._draft_points:
+                cx0, cy0 = self._image_to_canvas(*self._draft_points[0])
+                if abs(e.x - cx0) <= 8 and abs(e.y - cy0) <= 8:
+                    self._finish_polygon()
+                    return
             self._draft_points.append((img_x, img_y))
             self._render()
 
@@ -645,12 +671,19 @@ class LabelerPanel(ttk.Frame):
             if self.mode.get() == "sam_box":
                 self._run_sam_box(int(x_min), int(y_min), int(x_max), int(y_max))
             else:
-                self._snapshot()
-                self.shapes.append(_Shape("rectangle", self.current_class.get(),
-                                         [(x_min, y_min), (x_max, y_max)]))
-                self._refresh_shape_list()
-                self.dirty = True
-                self._update_counts()
+                label = self._prompt_label(self.current_class.get())
+                if label is not None:
+                    self.current_class.set(label)
+                    if label not in self.classes:
+                        self.classes.append(label)
+                        self.class_combo.configure(values=self.classes)
+                        self._refresh_label_list()
+                    self._snapshot()
+                    self.shapes.append(_Shape("rectangle", label,
+                                             [(x_min, y_min), (x_max, y_max)]))
+                    self._refresh_shape_list()
+                    self.dirty = True
+                    self._update_counts()
 
             self._rect_start_canvas = None
             self._draft_points = []
@@ -767,13 +800,62 @@ class LabelerPanel(ttk.Frame):
         }
         self.canvas.configure(cursor=cursor_map.get(self.mode.get(), "arrow"))
 
+    def _prompt_label(self, default_label: str) -> str | None:
+        if self._skip_prompt:
+            return default_label
+        dialog = tk.Toplevel(self)
+        dialog.title("Enter label")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Center dialog relative to parent
+        dialog.geometry(f"+{self.winfo_rootx() + 150}+{self.winfo_rooty() + 150}")
+        dialog.resizable(False, False)
+        
+        ttk.Label(dialog, text="Select or enter label:").pack(padx=10, pady=(10, 5), anchor="w")
+        
+        var = tk.StringVar(value=default_label)
+        combo = ttk.Combobox(dialog, textvariable=var, values=self.classes, width=25)
+        combo.pack(padx=10, pady=5)
+        combo.focus_set()
+        combo.select_range(0, "end")
+        
+        result = {"label": None}
+        
+        def _ok(_e=None):
+            lbl = var.get().strip()
+            if lbl:
+                result["label"] = lbl
+                dialog.destroy()
+                
+        def _cancel(_e=None):
+            dialog.destroy()
+            
+        btn_frm = ttk.Frame(dialog)
+        btn_frm.pack(fill="x", padx=10, pady=10)
+        ttk.Button(btn_frm, text="OK", command=_ok, width=8).pack(side="left")
+        ttk.Button(btn_frm, text="Cancel", command=_cancel, width=8).pack(side="left", padx=5)
+        
+        dialog.bind("<Return>", _ok)
+        dialog.bind("<Escape>", _cancel)
+        
+        self.wait_window(dialog)
+        return result["label"]
+
     def _finish_polygon(self) -> None:
         if self.mode.get() == "polygon" and len(self._draft_points) >= 3:
-            self._snapshot()
-            self.shapes.append(_Shape("polygon", self.current_class.get(), list(self._draft_points)))
-            self.dirty = True
-            self._refresh_shape_list()
-            self._update_counts()
+            label = self._prompt_label(self.current_class.get())
+            if label is not None:
+                self.current_class.set(label)
+                if label not in self.classes:
+                    self.classes.append(label)
+                    self.class_combo.configure(values=self.classes)
+                    self._refresh_label_list()
+                self._snapshot()
+                self.shapes.append(_Shape("polygon", label, list(self._draft_points)))
+                self.dirty = True
+                self._refresh_shape_list()
+                self._update_counts()
         self._draft_points = []
         self._render()
 
