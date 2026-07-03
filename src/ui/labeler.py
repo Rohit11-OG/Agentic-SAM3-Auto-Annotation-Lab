@@ -104,6 +104,7 @@ class LabelerPanel(ttk.Frame):
         self.coords_var = tk.StringVar(value="x=0 y=0")
         self.zoom_var = tk.StringVar(value="100%")
         self.count_var = tk.StringVar(value="shapes: 0")
+        self.autosave_var = tk.BooleanVar(value=True)
 
         self._build()
         self._bind_keys()
@@ -161,6 +162,8 @@ class LabelerPanel(ttk.Frame):
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
 
         ttk.Button(toolbar, text="🤖 Auto (SAM3)", command=self._auto_annotate).pack(side="left", padx=2)
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
+        ttk.Checkbutton(toolbar, text="Auto-save", variable=self.autosave_var).pack(side="left", padx=2)
 
         # ===== Body: 3 columns =====
         body = ttk.Frame(self)
@@ -189,6 +192,9 @@ class LabelerPanel(ttk.Frame):
         self.canvas.bind("<Double-Button-1>", self._on_double_click)
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Leave>", lambda e: self.canvas.delete("crosshair"))
+        self.canvas.bind("<Button-2>", self._on_pan_start)
+        self.canvas.bind("<B2-Motion>", self._on_pan_drag)
+        self.canvas.bind("<ButtonRelease-2>", self._on_pan_end)
 
         # Right: shape + label panels
         right = ttk.Frame(body, width=240)
@@ -233,6 +239,25 @@ class LabelerPanel(ttk.Frame):
             w.bind("<Control-S>", lambda e: self._save_json())
             w.bind("<Control-z>", lambda e: self._undo())
             w.bind("<Control-Z>", lambda e: self._undo())
+
+    def apply_theme(self, p: dict) -> None:
+        """Apply light/dark colors to standard Tkinter listboxes and canvas."""
+        for lb in (self.file_list, self.shape_list, self.label_list):
+            try:
+                lb.configure(
+                    bg=p["panel"],
+                    fg=p["fg"],
+                    selectbackground=p["accent"],
+                    selectforeground="#ffffff",
+                )
+            except Exception:
+                pass
+        try:
+            self.canvas.configure(bg=p["preview_bg"])
+        except Exception:
+            pass
+        self._refresh_label_list()
+        self._render()
 
     # ---------- modes ----------
     def _set_mode(self, m: str) -> None:
@@ -350,6 +375,9 @@ class LabelerPanel(ttk.Frame):
     def _confirm_unsaved(self) -> bool:
         if not self.dirty:
             return True
+        if self.autosave_var.get():
+            self._save_json()
+            return True
         ans = messagebox.askyesnocancel("Unsaved", "Save annotations before switching?")
         if ans is None:
             return False
@@ -465,7 +493,7 @@ class LabelerPanel(ttk.Frame):
         if self._image_obj is None:
             return
         try:
-            from PIL import ImageTk  # type: ignore
+            from PIL import Image, ImageTk  # type: ignore
         except Exception:  # noqa: BLE001
             return
 
@@ -481,7 +509,11 @@ class LabelerPanel(ttk.Frame):
         path_key = str(self.current_image_path) if self.current_image_path else ""
         state = (path_key, new_w, new_h)
         if state != self._photo_state or self._photo is None:
-            im_resized = self._image_obj.resize((new_w, new_h))
+            try:
+                resample_filter = Image.Resampling.BILINEAR
+            except AttributeError:
+                resample_filter = Image.BILINEAR
+            im_resized = self._image_obj.resize((new_w, new_h), resample=resample_filter)
             self._photo = ImageTk.PhotoImage(im_resized)
             self._photo_state = state
 
@@ -624,11 +656,116 @@ class LabelerPanel(ttk.Frame):
             self._draft_points = []
             self._render()
 
-    def _on_right_click(self, _e=None) -> None:
+    def _on_right_click(self, e=None) -> None:
+        if e is not None and self.mode.get() == "edit":
+            if self._delete_vertex_at(e.x, e.y):
+                return
         self._finish_polygon()
 
-    def _on_double_click(self, _e=None) -> None:
+    def _on_double_click(self, e=None) -> None:
+        if e is not None and self.mode.get() == "edit":
+            if self._insert_vertex_on_segment(e.x, e.y):
+                return
         self._finish_polygon()
+
+    def _point_to_segment_distance(self, px: float, py: float, a: Tuple[float, float], b: Tuple[float, float]) -> float:
+        ax, ay = a
+        bx, by = b
+        dx = bx - ax
+        dy = by - ay
+        if dx == 0 and dy == 0:
+            return ((px - ax)**2 + (py - ay)**2)**0.5
+            
+        t = ((px - ax) * dx + (py - ay) * dy) / (dx*dx + dy*dy)
+        t = max(0.0, min(1.0, t))
+        
+        proj_x = ax + t * dx
+        proj_y = ay + t * dy
+        return ((px - proj_x)**2 + (py - proj_y)**2)**0.5
+
+    def _insert_vertex_on_segment(self, cx: int, cy: int) -> bool:
+        if self._image_obj is None:
+            return False
+        img_x, img_y = self._canvas_to_image(cx, cy)
+        scale = self._fit_scale() * self._zoom
+        if scale == 0:
+            return False
+        best_shape_idx = None
+        best_vertex_idx = None
+        best_dist = 8.0 / scale
+        
+        for si, sh in enumerate(self.shapes):
+            if sh.kind != "polygon":
+                continue
+            n = len(sh.points)
+            for i in range(n):
+                p1 = sh.points[i]
+                p2 = sh.points[(i + 1) % n]
+                d = self._point_to_segment_distance(img_x, img_y, p1, p2)
+                if d < best_dist:
+                    best_dist = d
+                    best_shape_idx = si
+                    best_vertex_idx = (i + 1)
+                    
+        if best_shape_idx is not None and best_vertex_idx is not None:
+            self._snapshot()
+            self.shapes[best_shape_idx].points.insert(best_vertex_idx, (img_x, img_y))
+            self._sel_shape_idx = best_shape_idx
+            self._sel_vertex_idx = best_vertex_idx
+            self.dirty = True
+            self._refresh_shape_list()
+            self._render()
+            self.status_var.set("Inserted new vertex on segment.")
+            return True
+        return False
+
+    def _delete_vertex_at(self, cx: int, cy: int) -> bool:
+        if self._image_obj is None:
+            return False
+        for si, sh in enumerate(self.shapes):
+            if sh.kind != "polygon":
+                continue
+            for vi, (px, py) in enumerate(sh.points):
+                cxp, cyp = self._image_to_canvas(px, py)
+                if abs(cxp - cx) <= SELECT_RADIUS and abs(cyp - cy) <= SELECT_RADIUS:
+                    if len(sh.points) > 3:
+                        self._snapshot()
+                        sh.points.pop(vi)
+                        self._sel_shape_idx = None
+                        self._sel_vertex_idx = None
+                        self.dirty = True
+                        self._refresh_shape_list()
+                        self._render()
+                        self.status_var.set("Deleted vertex.")
+                        return True
+                    else:
+                        self.status_var.set("Cannot delete vertex: polygon needs at least 3 vertices.")
+                        return False
+        return False
+
+    def _on_pan_start(self, e) -> None:
+        if self._image_obj is None:
+            return
+        self._drag_anchor = (e.x, e.y, self._pan[0], self._pan[1])
+        self._dragging_canvas = True
+        self.canvas.configure(cursor="fleur")
+
+    def _on_pan_drag(self, e) -> None:
+        if self._dragging_canvas and self._drag_anchor is not None:
+            sx, sy, px0, py0 = self._drag_anchor
+            self._pan = [px0 + (e.x - sx), py0 + (e.y - sy)]
+            self._render()
+
+    def _on_pan_end(self, e) -> None:
+        self._dragging_canvas = False
+        self._drag_anchor = None
+        cursor_map = {
+            "rectangle": "crosshair",
+            "polygon": "crosshair",
+            "edit": "hand2",
+            "sam_box": "plus",
+        }
+        self.canvas.configure(cursor=cursor_map.get(self.mode.get(), "arrow"))
 
     def _finish_polygon(self) -> None:
         if self.mode.get() == "polygon" and len(self._draft_points) >= 3:

@@ -793,3 +793,93 @@ def test_clear_session_resets_state(gui, tmp_path: Path) -> None:
     assert gui.log_text.get("1.0", "end").strip() == ""
     assert gui.summary_text.get("1.0", "end").strip() == ""
     assert gui.status_var.get() == "Session cleared."
+
+
+def test_labeler_middle_button_pan(labeler, tmp_path: Path) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+
+    class FakeEvent:
+        def __init__(self, x, y):
+            self.x = x
+            self.y = y
+
+    labeler._on_pan_start(FakeEvent(10, 10))
+    assert labeler._dragging_canvas is True
+    assert labeler._drag_anchor == (10, 10, 0, 0)
+
+    labeler._on_pan_drag(FakeEvent(25, 30))
+    assert labeler._pan == [15, 20]
+
+    labeler._on_pan_end(FakeEvent(25, 30))
+    assert labeler._dragging_canvas is False
+
+
+def test_labeler_autosave_toggle(labeler, tmp_path: Path) -> None:
+    from src.ui.labeler import _Shape
+    img1 = tmp_path / "img1.jpg"
+    img2 = tmp_path / "img2.jpg"
+    Image.new("RGB", (100, 100)).save(img1)
+    Image.new("RGB", (100, 100)).save(img2)
+    labeler.image_paths = [img1, img2]
+    labeler.current_idx = 0
+    labeler._load_image(img1)
+
+    labeler.shapes = [_Shape("rectangle", "test", [(10, 10), (20, 20)])]
+    labeler.dirty = True
+
+    assert labeler.autosave_var.get() is True
+    assert labeler._confirm_unsaved() is True
+    saved_json = tmp_path / "img1.json"
+    assert saved_json.exists()
+
+
+def test_labeler_insert_vertex(labeler, tmp_path: Path) -> None:
+    from src.ui.labeler import _Shape
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.mode.set("edit")
+
+    labeler.shapes = [_Shape("polygon", "box", [(10, 10), (50, 10), (50, 50), (10, 50)])]
+    cx, cy = labeler._image_to_canvas(30, 10)
+
+    class FakeEvent:
+        def __init__(self, x, y):
+            self.x = x
+            self.y = y
+
+    labeler._on_double_click(FakeEvent(cx, cy))
+    assert len(labeler.shapes[0].points) == 5
+    assert labeler.shapes[0].points[1] == (30.0, 10.0)
+
+
+def test_labeler_delete_vertex(labeler, tmp_path: Path) -> None:
+    from src.ui.labeler import _Shape
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.mode.set("edit")
+
+    labeler.shapes = [_Shape("polygon", "box", [(10, 10), (50, 10), (50, 50), (10, 50)])]
+    cx, cy = labeler._image_to_canvas(50, 50)
+
+    class FakeEvent:
+        def __init__(self, x, y):
+            self.x = x
+            self.y = y
+
+    labeler._on_right_click(FakeEvent(cx, cy))
+    assert len(labeler.shapes[0].points) == 3
+    assert (50.0, 50.0) not in labeler.shapes[0].points
+
+    cx2, cy2 = labeler._image_to_canvas(10, 10)
+    labeler._on_right_click(FakeEvent(cx2, cy2))
+    assert len(labeler.shapes[0].points) == 3

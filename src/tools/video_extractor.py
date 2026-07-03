@@ -124,9 +124,22 @@ def extract_frames(
 
         encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
 
+        current_frame = 0
         for count, frame_idx in enumerate(indices, start=1):
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-            ok, frame = cap.read()
+            if frame_idx == current_frame:
+                ok, frame = cap.read()
+                current_frame += 1
+            elif frame_idx > current_frame and (frame_idx - current_frame) < 15:
+                while current_frame < frame_idx:
+                    cap.grab()
+                    current_frame += 1
+                ok, frame = cap.read()
+                current_frame += 1
+            else:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ok, frame = cap.read()
+                current_frame = frame_idx + 1
+
             if not ok:
                 LOGGER.debug("Could not read frame %d", frame_idx)
                 continue

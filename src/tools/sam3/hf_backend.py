@@ -80,11 +80,16 @@ def _load_model(repo_id: str, params: Dict[str, Any]) -> Tuple[Any, Any, str, An
             _os.environ.setdefault("HF_HUB_OFFLINE", "1")
             _os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
+        attn_impl = "sdpa" if device.startswith("cuda") else None
+        kwargs: Dict[str, Any] = {"local_files_only": local_only}
+        if attn_impl:
+            kwargs["attn_implementation"] = attn_impl
+
         processor = AutoProcessor.from_pretrained(source, local_files_only=local_only)
         try:
-            model = AutoModel.from_pretrained(source, dtype=dtype, local_files_only=local_only)
+            model = AutoModel.from_pretrained(source, dtype=dtype, **kwargs)
         except TypeError:
-            model = AutoModel.from_pretrained(source, torch_dtype=dtype, local_files_only=local_only)
+            model = AutoModel.from_pretrained(source, torch_dtype=dtype, **kwargs)
         model.to(device)
         model.eval()
 
@@ -333,12 +338,17 @@ def _load_image_model(repo_id: str, params: Dict[str, Any]) -> Tuple[Any, Any, s
             _os.environ.setdefault("HF_HUB_OFFLINE", "1")
             _os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
+        attn_impl = "sdpa" if device.startswith("cuda") else None
+        kwargs: Dict[str, Any] = {"local_files_only": bool(local_dir)}
+        if attn_impl:
+            kwargs["attn_implementation"] = attn_impl
+
         LOGGER.info("Loading SAM3 image model from %s (device=%s)", source, device)
         processor = Sam3Processor.from_pretrained(source, local_files_only=bool(local_dir))
         try:
-            model = Sam3Model.from_pretrained(source, dtype=dtype, local_files_only=bool(local_dir))
+            model = Sam3Model.from_pretrained(source, dtype=dtype, **kwargs)
         except TypeError:
-            model = Sam3Model.from_pretrained(source, torch_dtype=dtype, local_files_only=bool(local_dir))
+            model = Sam3Model.from_pretrained(source, torch_dtype=dtype, **kwargs)
         model.to(device).eval()
         _IMAGE_MODEL_CACHE[cache_key] = (model, processor, device, dtype)
         return _IMAGE_MODEL_CACHE[cache_key]
@@ -372,12 +382,17 @@ def _load_tracker_model(repo_id: str, params: Dict[str, Any]) -> Tuple[Any, Any,
             _os.environ.setdefault("HF_HUB_OFFLINE", "1")
             _os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
+        attn_impl = "sdpa" if device.startswith("cuda") else None
+        kwargs: Dict[str, Any] = {"local_files_only": bool(local_dir)}
+        if attn_impl:
+            kwargs["attn_implementation"] = attn_impl
+
         LOGGER.info("Loading SAM3 tracker model from %s (device=%s)", source, device)
         processor = Sam3TrackerVideoProcessor.from_pretrained(source, local_files_only=bool(local_dir))
         try:
-            model = Sam3TrackerVideoModel.from_pretrained(source, dtype=dtype, local_files_only=bool(local_dir))
+            model = Sam3TrackerVideoModel.from_pretrained(source, dtype=dtype, **kwargs)
         except TypeError:
-            model = Sam3TrackerVideoModel.from_pretrained(source, torch_dtype=dtype, local_files_only=bool(local_dir))
+            model = Sam3TrackerVideoModel.from_pretrained(source, torch_dtype=dtype, **kwargs)
         model.to(device).eval()
         _TRACKER_MODEL_CACHE[cache_key] = (model, processor, device, dtype)
         return _TRACKER_MODEL_CACHE[cache_key]

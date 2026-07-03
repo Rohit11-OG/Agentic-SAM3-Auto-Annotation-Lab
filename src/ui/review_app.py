@@ -169,17 +169,102 @@ class AnnotatorGUI:
         style.configure("Muted.TLabel", foreground=p["muted"])
         style.configure("TLabelframe", background=p["bg"], foreground=p["fg"])
         style.configure("TLabelframe.Label", background=p["bg"], foreground=p["fg"])
-        style.configure("TNotebook", background=p["bg"])
-        style.configure("TNotebook.Tab", padding=(12, 6), font=("Segoe UI", 10))
-        style.configure("TButton", padding=(8, 4))
-        style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"))
-        style.configure("TEntry", fieldbackground=p["panel"], foreground=p["fg"])
-        style.configure("TCombobox", fieldbackground=p["panel"], foreground=p["fg"])
-        style.configure("TSpinbox", fieldbackground=p["panel"], foreground=p["fg"])
+        
+        # Notebook & Tabs
+        style.configure("TNotebook", background=p["bg"], borderwidth=0)
+        style.configure(
+            "TNotebook.Tab",
+            background=p["panel"],
+            foreground=p["fg"],
+            padding=(12, 6),
+            font=("Segoe UI", 10),
+            borderwidth=1,
+            lightcolor=p["bg"],
+            darkcolor=p["panel"],
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", p["bg"]), ("active", p["panel"])],
+            foreground=[("selected", p["fg"]), ("active", p["fg"])],
+        )
+
+        # Buttons
+        style.configure(
+            "TButton",
+            background=p["panel"],
+            foreground=p["fg"],
+            padding=(8, 4),
+            borderwidth=1,
+            bordercolor=p["panel"],
+        )
+        style.map(
+            "TButton",
+            background=[("pressed", p["accent"]), ("active", p["accent"])],
+            foreground=[("pressed", "#ffffff"), ("active", "#ffffff")],
+        )
+        style.configure(
+            "Accent.TButton",
+            background=p["accent"],
+            foreground="#ffffff",
+            font=("Segoe UI", 10, "bold"),
+        )
+        style.map(
+            "Accent.TButton",
+            background=[("pressed", p["accent"]), ("active", p["accent"])],
+            foreground=[("pressed", "#ffffff"), ("active", "#ffffff")],
+        )
+
+        # Entries, Comboboxes, Spinboxes
+        style.configure("TEntry", fieldbackground=p["panel"], foreground=p["fg"], insertcolor=p["fg"])
+        style.map("TEntry", fieldbackground=[("focus", p["panel"])])
+        
+        style.configure("TCombobox", fieldbackground=p["panel"], foreground=p["fg"], background=p["panel"])
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", p["panel"])],
+            background=[("readonly", p["panel"])],
+            foreground=[("readonly", p["fg"])],
+        )
+        
+        style.configure("TSpinbox", fieldbackground=p["panel"], foreground=p["fg"], background=p["panel"])
+        style.map(
+            "TSpinbox",
+            fieldbackground=[("readonly", p["panel"])],
+            background=[("readonly", p["panel"])],
+            foreground=[("readonly", p["fg"])],
+        )
+
+        # Checkbutton
+        style.configure("TCheckbutton", background=p["bg"], foreground=p["fg"])
+        style.map(
+            "TCheckbutton",
+            background=[("active", p["bg"])],
+            foreground=[("active", p["fg"])],
+        )
+
+        # Progressbar
+        style.configure("TProgressbar", troughcolor=p["panel"], background=p["accent"])
+
+        # Option database for Combobox dropdown lists
+        self.root.option_add("*TCombobox*Listbox.background", p["panel"])
+        self.root.option_add("*TCombobox*Listbox.foreground", p["fg"])
+        self.root.option_add("*TCombobox*Listbox.selectBackground", p["accent"])
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+        self.root.option_add("*TCombobox*Listbox.font", ("Segoe UI", 10))
+
+        # Menus styling
+        for child in self.root.winfo_children():
+            if isinstance(child, tk.Menu):
+                try:
+                    child.configure(bg=p["panel"], fg=p["fg"], activebackground=p["accent"], activeforeground="#ffffff")
+                except Exception:
+                    pass
+
         self.root.configure(bg=p["bg"])
 
         # Reconfigure already-built text widgets if any
-        for widget_name in ("log_text", "summary_text", "preview_text", "label_content"):
+        for widget_name in ("log_text", "summary_text", "preview_text", "label_content",
+                            "dash_chart", "dash_issues", "_video_log"):
             w = getattr(self, widget_name, None)
             if w is not None:
                 w.configure(bg=p["log_bg"], fg=p["fg"], insertbackground=p["fg"])
@@ -190,6 +275,15 @@ class AnnotatorGUI:
         if canvas is not None:
             canvas.configure(bg=p["preview_bg"])
         self._reconfigure_log_tags()
+
+        # Propagate theme changes to labeler panel
+        lp = getattr(self, "labeler_panel", None)
+        if lp is not None and hasattr(lp, "apply_theme"):
+            try:
+                lp.apply_theme(p)
+            except Exception:
+                pass
+                pass
 
     def _reconfigure_log_tags(self) -> None:
         log = getattr(self, "log_text", None)
@@ -1361,7 +1455,11 @@ class AnnotatorGUI:
         fit_scale = min(cw / W, ch / H, 1.0)
         scale = fit_scale * self._zoom
         new_size = (max(1, int(W * scale)), max(1, int(H * scale)))
-        im_resized = out_im.resize(new_size)
+        try:
+            resample_filter = Image.Resampling.BILINEAR
+        except AttributeError:
+            resample_filter = Image.BILINEAR
+        im_resized = out_im.resize(new_size, resample=resample_filter)
         self._preview_imgref = ImageTk.PhotoImage(im_resized)
         px = cw // 2 + self._pan[0]
         py = ch // 2 + self._pan[1]
