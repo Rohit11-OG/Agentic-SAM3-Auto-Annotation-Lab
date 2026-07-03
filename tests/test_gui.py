@@ -421,7 +421,8 @@ def test_load_and_accept_results_flow(gui, tmp_path: Path, monkeypatch) -> None:
     assert gui._classes == ["box"]
 
     # 2. Verify listbox populates and selects
-    gui.labels_listbox.insert("end", "⚠  [ 1]  test_frame")
+    assert gui.labels_listbox.size() == 1
+    assert "test_frame" in gui.labels_listbox.get(0)
     gui.labels_listbox.selection_set(0)
 
     # Trigger select callback manually

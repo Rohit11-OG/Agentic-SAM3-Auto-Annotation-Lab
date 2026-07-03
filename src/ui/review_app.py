@@ -1151,6 +1151,51 @@ class AnnotatorGUI:
         self.notebook.select(self.results_tab)
 
     # ---------- labels viewer ----------
+    def _generate_yolo_lines_for_bundle(self, bundle: AnnotationBundle) -> str:
+        if not self._classes:
+            classes = sorted({mask.class_id for mask in bundle.masks})
+        else:
+            classes = self._classes
+        class_to_id = {name: i for i, name in enumerate(classes)}
+
+        segmentation = False
+        if self.last_config:
+            segmentation = self.last_config.yolo_segmentation
+        else:
+            segmentation = (self.last_output_path / "yolo_seg_labels").exists() if self.last_output_path else False
+
+        lines = []
+        width = max(bundle.image.width, 1)
+        height = max(bundle.image.height, 1)
+        for mask in bundle.masks:
+            if mask.class_id not in class_to_id:
+                continue
+            cid = class_to_id[mask.class_id]
+
+            if segmentation and mask.polygon and len(mask.polygon) >= 3:
+                coords = []
+                for (px, py) in mask.polygon:
+                    nx = min(1.0, max(0.0, px / width))
+                    ny = min(1.0, max(0.0, py / height))
+                    coords.append(f"{nx:.6f}")
+                    coords.append(f"{ny:.6f}")
+                lines.append(f"{cid} " + " ".join(coords))
+                continue
+
+            x, y, w, h = mask.bbox
+            x = max(0, min(x, width - 1))
+            y = max(0, min(y, height - 1))
+            w = max(1, min(w, width - x))
+            h = max(1, min(h, height - y))
+            x_center = min(1.0, max(0.0, (x + (w / 2.0)) / width))
+            y_center = min(1.0, max(0.0, (y + (h / 2.0)) / height))
+            norm_w = min(1.0, max(0.0, w / width))
+            norm_h = min(1.0, max(0.0, h / height))
+            lines.append(
+                f"{cid} {x_center:.6f} {y_center:.6f} {norm_w:.6f} {norm_h:.6f}"
+            )
+        return "\n".join(lines)
+
     def _load_labels_list(self) -> None:
         self._label_files = {}
         if not self.last_output_path:
@@ -1168,10 +1213,21 @@ class AnnotatorGUI:
             if d.exists():
                 labels_dir = d
                 break
-        if labels_dir is None:
-            return
-        for lf in sorted(labels_dir.glob("*.txt")):
-            self._label_files[lf.stem] = lf
+
+        if self.last_bundles:
+            for bundle in self.last_bundles:
+                stem = bundle.image.path.stem
+                if labels_dir:
+                    lf = labels_dir / f"{stem}.txt"
+                    if lf.exists():
+                        self._label_files[stem] = lf
+                        continue
+                self._label_files[stem] = None
+        else:
+            if labels_dir is not None:
+                for lf in sorted(labels_dir.glob("*.txt")):
+                    self._label_files[lf.stem] = lf
+
         self._refresh_labels_list()
 
     def _refresh_labels_list(self) -> None:
@@ -1186,8 +1242,12 @@ class AnnotatorGUI:
                 continue
             badge = "✓" if status == "ACCEPTED" else ("⚠" if status == "HUMAN_REVIEW" else "·")
             try:
-                lines = [l for l in lf.read_text(encoding="utf-8").splitlines() if l.strip()]
-                count = len(lines)
+                if lf is not None:
+                    lines = [l for l in lf.read_text(encoding="utf-8").splitlines() if l.strip()]
+                    count = len(lines)
+                else:
+                    bundle = next((b for b in self.last_bundles if b.image.path.stem == stem), None)
+                    count = len(bundle.masks) if bundle else 0
             except Exception:  # noqa: BLE001
                 count = 0
             self.labels_listbox.insert("end", f"{badge}  [{count:>2}]  {stem}")
@@ -1208,10 +1268,15 @@ class AnnotatorGUI:
             self.accept_btn.configure(state="disabled")
 
         lf = self._label_files.get(stem)
-        if not lf:
-            return
+        if lf is not None:
+            content = lf.read_text(encoding="utf-8")
+        else:
+            bundle = next((b for b in self.last_bundles if b.image.path.stem == stem), None)
+            if bundle:
+                content = self._generate_yolo_lines_for_bundle(bundle)
+            else:
+                content = ""
 
-        content = lf.read_text(encoding="utf-8")
         self.label_content.delete("1.0", "end")
         self.label_content.insert("end", content if content.strip() else "(empty)")
 
@@ -1393,7 +1458,15 @@ class AnnotatorGUI:
             W, H = base.size
             overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             od = ImageDraw.Draw(overlay)
-            for idx, line in enumerate(lf.read_text(encoding="utf-8").splitlines()):
+            if lf is not None:
+                lines = lf.read_text(encoding="utf-8").splitlines()
+            else:
+                bundle = next((b for b in self.last_bundles if b.image.path.stem == stem), None)
+                if bundle:
+                    lines = self._generate_yolo_lines_for_bundle(bundle).splitlines()
+                else:
+                    lines = []
+            for idx, line in enumerate(lines):
                 p = line.split()
                 if not p:
                     continue
@@ -1632,7 +1705,7 @@ class AnnotatorGUI:
                 messagebox.showwarning("Warning", f"Could not export updated labels to YOLO files: {exc}")
 
         # Refresh listbox and maintain selection
-        self._refresh_labels_list()
+        self._load_labels_list()
         self._update_accept_all_btn_state()
 
         # Find the new index of the stem in the listbox and reselect it
@@ -1711,7 +1784,7 @@ class AnnotatorGUI:
                 messagebox.showwarning("Warning", f"Could not export updated labels to YOLO files: {exc}")
 
         # Refresh listbox and maintain selection
-        self._refresh_labels_list()
+        self._load_labels_list()
         self._update_accept_all_btn_state()
 
         sel = self.labels_listbox.curselection()
@@ -1935,13 +2008,20 @@ class AnnotatorGUI:
             messagebox.showwarning("No output folder", "Set the output folder in Setup tab first.")
             return
 
-        labels_dir = out_dir / "labels"
-        if not labels_dir.exists():
-            messagebox.showwarning("No labels", f"No labels/ folder found in:\n{out_dir}\nRun pipeline or annotate images first.")
+        labels_dir = None
+        for cand in ("yolo_seg_labels", "yolo_labels", "labels"):
+            d = out_dir / cand
+            if d.exists():
+                labels_dir = d
+                break
+        if labels_dir is None:
+            messagebox.showwarning("No labels", f"No label folder found in:\n{out_dir}\nRun pipeline or annotate images first.")
             return
 
         refs = []
         for lf in sorted(labels_dir.glob("*.txt")):
+            if lf.name == "classes.txt":
+                continue
             stem = lf.stem
             lines = [l.strip() for l in lf.read_text(encoding="utf-8").splitlines() if l.strip()]
             if not lines:
@@ -1956,7 +2036,7 @@ class AnnotatorGUI:
                         break
             if img_path is None:
                 continue
-            # Parse YOLO bboxes (normalized cx cy w h → pixel x1y1x2y2)
+            # Parse YOLO bboxes (normalized cx cy w h or polygon coords nx1 ny1 nx2 ny2... → pixel x1y1x2y2)
             try:
                 from PIL import Image as _PILImg
                 with _PILImg.open(img_path) as im:
@@ -1969,11 +2049,21 @@ class AnnotatorGUI:
                 if len(parts) < 5:
                     continue
                 try:
-                    cx, cy, bw, bh = float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])
-                    x1 = int((cx - bw / 2) * W)
-                    y1 = int((cy - bh / 2) * H)
-                    x2 = int((cx + bw / 2) * W)
-                    y2 = int((cy + bh / 2) * H)
+                    if len(parts) >= 7 and len(parts) % 2 == 1:
+                        # Polygon format: class x1 y1 x2 y2 ...
+                        xs = [float(parts[i]) for i in range(1, len(parts), 2)]
+                        ys = [float(parts[i]) for i in range(2, len(parts), 2)]
+                        x1 = int(min(xs) * W)
+                        y1 = int(min(ys) * H)
+                        x2 = int(max(xs) * W)
+                        y2 = int(max(ys) * H)
+                    else:
+                        # Bbox format: class cx cy w h
+                        cx, cy, bw, bh = float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])
+                        x1 = int((cx - bw / 2) * W)
+                        y1 = int((cy - bh / 2) * H)
+                        x2 = int((cx + bw / 2) * W)
+                        y2 = int((cy + bh / 2) * H)
                     bboxes.append((max(0, x1), max(0, y1), min(W, x2), min(H, y2)))
                 except Exception:
                     continue
@@ -1981,7 +2071,7 @@ class AnnotatorGUI:
                 refs.append((img_path, bboxes))
 
         if not refs:
-            messagebox.showwarning("No references found", "No annotated images found in labels folder.\nAnnotate some images in Labeler or run pipeline first.")
+            messagebox.showwarning("No references found", f"No annotated images found in labels folder ({labels_dir.name}).\nAnnotate some images in Labeler or run pipeline first.")
             return
 
         self._fs_refs = refs
@@ -2058,7 +2148,14 @@ class AnnotatorGUI:
             from src.core.models import AnnotationBundle, ImageRecord, MaskRecord, new_mask_id, ProjectConfig
             import time
 
-            labels_dir = out_dir / "labels"
+            # Determine labels folder name: yolo_seg_labels if segmentation, else yolo_labels
+            labels_folder_name = "yolo_labels"
+            if self.last_config and self.last_config.yolo_segmentation:
+                labels_folder_name = "yolo_seg_labels"
+            elif (out_dir / "yolo_seg_labels").exists():
+                labels_folder_name = "yolo_seg_labels"
+
+            labels_dir = out_dir / labels_folder_name
             labels_dir.mkdir(parents=True, exist_ok=True)
 
             # Process in batches of 8 to avoid OOM
@@ -2113,6 +2210,49 @@ class AnnotatorGUI:
                     label_path.write_text("\n".join(lines), encoding="utf-8")
                     written += 1
 
+            # Ensure classes.txt exists in the output folder
+            classes_file = out_dir / "classes.txt"
+            if not classes_file.exists():
+                classes_file.write_text(class_name, encoding="utf-8")
+
+            # Update in-memory bundles so results list updates immediately
+            if self.last_bundles:
+                for p in targets:
+                    masks_raw = all_results.get(str(p), [])
+                    if not masks_raw:
+                        continue
+                    # Find or create bundle
+                    bundle = next((b for b in self.last_bundles if b.image.path == p), None)
+                    if not bundle:
+                        try:
+                            from PIL import Image as _PI
+                            with _PI.open(p) as im:
+                                w_img, h_img = im.size
+                        except Exception:
+                            w_img, h_img = 1024, 1024
+                        im_rec = ImageRecord(id=f"img_{p.stem}", path=p, width=w_img, height=h_img)
+                        bundle = AnnotationBundle(image=im_rec, status="ACCEPTED")
+                        self.last_bundles.append(bundle)
+                    
+                    bundle.status = "ACCEPTED"
+                    self._bundle_status[p.stem] = "ACCEPTED"
+                    
+                    # Convert raw masks to MaskRecords
+                    converted_masks = []
+                    for m in masks_raw:
+                        converted_masks.append(MaskRecord(
+                            mask_id=new_mask_id(),
+                            image_id=bundle.image.id,
+                            class_id=class_name,
+                            polygon=m.polygon,
+                            bbox=m.bbox,
+                            area=m.area,
+                            confidence=m.confidence,
+                            source="sam3",
+                            version=1
+                        ))
+                    bundle.masks = converted_masks
+
             cancelled = self._fs_cancel_var.get()
             def _done():
                 self._fs_run_btn.configure(state="normal")
@@ -2121,6 +2261,7 @@ class AnnotatorGUI:
                 msg = f"Cancelled. " if cancelled else ""
                 self._fs_status_var.set(f"{msg}Done. {written}/{total} images annotated → {labels_dir}")
                 if written > 0:
+                    self._load_labels_list()  # Refresh results tab lists!
                     messagebox.showinfo("Few-Shot Complete", f"Annotated {written} of {total} target images.\nLabels saved to:\n{labels_dir}")
             self.root.after(0, _done)
 
