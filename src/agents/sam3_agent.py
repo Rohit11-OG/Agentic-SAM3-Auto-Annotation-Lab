@@ -56,9 +56,15 @@ class SAM3Agent(BaseAgent):
 
         # Multi-class text prompts -> single-session call (saves image encoding)
         if text_classes:
-            class_prompts = [
-                (cls, per_class_prompt.get(cls, cls)) for cls in text_classes
-            ]
+            # Each prompt may hold "|"-separated variants ("defect|paint mark|stain"):
+            # try them in order until one yields masks for that class.
+            class_variants: Dict[str, List[str]] = {}
+            for cls in text_classes:
+                raw_prompt = per_class_prompt.get(cls, cls)
+                variants = [v.strip() for v in str(raw_prompt).split("|") if v.strip()]
+                class_variants[cls] = variants or [cls]
+
+            class_prompts = [(cls, class_variants[cls][0]) for cls in text_classes]
             # Per-class hints currently only affect retry; merge once for the batch
             merged_params = {**self.default_params}
             if bundle.retry_count > 0:
@@ -71,6 +77,28 @@ class SAM3Agent(BaseAgent):
                 model_name=self.model_name,
                 params=merged_params,
             )
+
+            # Fallback pass: classes with 0 masks retry their remaining variants
+            variant_idx = 1
+            while True:
+                empty = [
+                    cls for cls in text_classes
+                    if not batch.get(cls) and variant_idx < len(class_variants[cls])
+                ]
+                if not empty:
+                    break
+                retry_prompts = [(cls, class_variants[cls][variant_idx]) for cls in empty]
+                retry_batch = sam3_segment_text_prompts_multi(
+                    image_path=bundle.image.path,
+                    class_prompts=retry_prompts,
+                    model_name=self.model_name,
+                    params=merged_params,
+                )
+                for cls, masks in retry_batch.items():
+                    if masks:
+                        batch[cls] = masks
+                variant_idx += 1
+
             for class_name in text_classes:
                 for raw in batch.get(class_name, []):
                     generated_masks.append(

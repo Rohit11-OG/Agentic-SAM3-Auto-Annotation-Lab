@@ -701,7 +701,11 @@ class AnnotatorGUI:
         ttk.Label(frm, text="SAM3 Text Prompt:").grid(row=row, column=0, sticky="w", pady=4)
         sam3_entry = ttk.Entry(frm, textvariable=self.sam3_prompt_var, width=78)
         sam3_entry.grid(row=row, column=1, sticky="we")
-        attach_tooltip(sam3_entry, "Text prompt for SAM3 (e.g. metal silver color box)")
+        attach_tooltip(
+            sam3_entry,
+            "Text prompt for SAM3. Use | for fallback variants tried until masks found\n"
+            "e.g. paint mark|dark spot|stain — commas separate per-class prompts",
+        )
 
         row += 1
         opts = ttk.LabelFrame(frm, text="Pipeline options", padding=8)

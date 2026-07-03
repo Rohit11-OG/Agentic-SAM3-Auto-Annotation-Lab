@@ -25,6 +25,10 @@ _LAST_IMG_PATH: List[str] = []  # FIFO of paths cached; cap at 2
 _IMAGE_MODEL_LOCK = threading.Lock()
 _IMAGE_MODEL_CACHE: Dict[str, Tuple[Any, Any, str, Any]] = {}
 
+# Tracker-video model (for few-shot box propagation) — third flavor of the same checkpoint
+_TRACKER_MODEL_LOCK = threading.Lock()
+_TRACKER_MODEL_CACHE: Dict[str, Tuple[Any, Any, str, Any]] = {}
+
 
 @dataclass
 class _Detection:
@@ -340,6 +344,45 @@ def _load_image_model(repo_id: str, params: Dict[str, Any]) -> Tuple[Any, Any, s
         return _IMAGE_MODEL_CACHE[cache_key]
 
 
+def _load_tracker_model(repo_id: str, params: Dict[str, Any]) -> Tuple[Any, Any, str, Any]:
+    """Load Sam3TrackerVideo model + processor (SAM2-style box/point tracking)."""
+    cache_key = f"{repo_id}|{params.get('local_dir') or ''}|{params.get('device') or 'auto'}"
+    cached = _TRACKER_MODEL_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    with _TRACKER_MODEL_LOCK:
+        cached = _TRACKER_MODEL_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            import torch  # type: ignore
+            from transformers import Sam3TrackerVideoModel, Sam3TrackerVideoProcessor  # type: ignore
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                "Install: pip install torch torchvision transformers accelerate"
+            ) from exc
+
+        device = _resolve_device(params.get("device"))
+        dtype = torch.float16 if device.startswith("cuda") else torch.float32
+        local_dir = params.get("local_dir")
+        source = local_dir if local_dir else repo_id
+        if bool(local_dir):
+            import os as _os
+            _os.environ.setdefault("HF_HUB_OFFLINE", "1")
+            _os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
+        LOGGER.info("Loading SAM3 tracker model from %s (device=%s)", source, device)
+        processor = Sam3TrackerVideoProcessor.from_pretrained(source, local_files_only=bool(local_dir))
+        try:
+            model = Sam3TrackerVideoModel.from_pretrained(source, dtype=dtype, local_files_only=bool(local_dir))
+        except TypeError:
+            model = Sam3TrackerVideoModel.from_pretrained(source, torch_dtype=dtype, local_files_only=bool(local_dir))
+        model.to(device).eval()
+        _TRACKER_MODEL_CACHE[cache_key] = (model, processor, device, dtype)
+        return _TRACKER_MODEL_CACHE[cache_key]
+
+
 def segment_fewshot(
     ref_data: List[Tuple[Path, List[Tuple[int, int, int, int]]]],
     target_paths: List[Path],
@@ -347,14 +390,15 @@ def segment_fewshot(
     model_name: str,
     params: Dict[str, Any],
 ) -> Dict[str, List[_Detection]]:
-    """Few-shot annotation: use manually annotated reference images to propagate masks to target images.
+    """Few-shot annotation via SAM3 tracker: reference boxes seed object masklets,
+    the tracker propagates them across the remaining frames.
 
     ref_data: list of (image_path, list_of_bboxes_x1y1x2y2)
     target_paths: list of unannotated image paths
     Returns: {str(target_path): [_Detection, ...]}
     """
     repo_id = params.get("hf_repo_id") or model_name or "facebook/sam3"
-    model, processor, device, dtype = _load_model(repo_id, params)
+    model, processor, device, dtype = _load_tracker_model(repo_id, params)
 
     try:
         import torch  # type: ignore
@@ -362,94 +406,85 @@ def segment_fewshot(
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError("PIL/torch required") from exc
 
-    def _open(p: Path):
-        with _IMG_LOCK:
-            cached = _LAST_IMG.get(str(p))
-        if cached is not None:
-            return cached
-        img = Image.open(p).convert("RGB")
-        with _IMG_LOCK:
-            _LAST_IMG[str(p)] = img
-            _LAST_IMG_PATH.append(str(p))
-            while len(_LAST_IMG_PATH) > 8:
-                old = _LAST_IMG_PATH.pop(0)
-                _LAST_IMG.pop(old, None)
-        return img
+    target_frames = [Image.open(p).convert("RGB") for p in target_paths]
 
-    ref_images = [(_open(p), bboxes) for p, bboxes in ref_data]
-    target_images = [(_open(p), p) for p in target_paths]
+    results: Dict[str, List[_Detection]] = {str(p): [] for p in target_paths}
 
-    # Build frame list: references first, then targets
-    all_frames = [img for img, _ in ref_images] + [img for img, _ in target_images]
-    n_refs = len(ref_images)
-    threshold = float(params.get("hf_score_threshold", 0.3))
+    # One session per reference frame: the tracker only supports a single
+    # conditioning frame per masklet, so multi-ref runs are merged afterwards.
+    with _INFERENCE_LOCK:
+        for ref_path, bboxes in ref_data:
+            if not bboxes:
+                continue
+            ref_frame = Image.open(ref_path).convert("RGB")
+            all_frames = [ref_frame] + target_frames
 
-    session = processor.init_video_session(
-        video=all_frames,
-        inference_device=device,
-        dtype=dtype,
-    )
+            session = processor.init_video_session(
+                video=all_frames,
+                inference_device=device,
+                dtype=dtype,
+            )
 
-    # Add prompts for reference frames
-    for frame_idx, (_, bboxes) in enumerate(ref_images):
-        if not bboxes:
-            continue
-        # Try point prompt at bbox centers (SAM3 video API)
-        for bbox in bboxes:
-            x1, y1, x2, y2 = bbox
-            cx = (x1 + x2) // 2
-            cy = (y1 + y2) // 2
-            added = False
-            for method_name in ("add_point_prompt", "add_new_point_prompt", "add_new_points_to_video"):
-                fn = getattr(processor, method_name, None)
-                if fn is None:
-                    continue
-                try:
-                    import inspect
-                    sig = inspect.signature(fn)
-                    if "frame_idx" in sig.parameters:
-                        fn(session, frame_idx=frame_idx, points=[[cx, cy]], labels=[1])
-                    else:
-                        fn(session, points=[[cx, cy]], labels=[1])
-                    added = True
-                    break
-                except Exception:  # noqa: BLE001
-                    continue
-            if not added:
-                # Fall back to text prompt on the first reference frame
-                try:
-                    processor.add_text_prompt(session, text=str(class_name))
-                    break
-                except Exception:  # noqa: BLE001
-                    pass
+            # All boxes must go in one call: incremental adds leave earlier
+            # objects without conditioning memory and propagation fails.
+            box_list = [[float(v) for v in bbox] for bbox in bboxes]
+            processor.add_inputs_to_inference_session(
+                session,
+                frame_idx=0,
+                obj_ids=list(range(len(box_list))),
+                input_boxes=[box_list],
+            )
 
-    results: Dict[str, List[_Detection]] = {}
-    with torch.no_grad():
-        frame_idx = 0
-        for out in model.propagate_in_video_iterator(session):
-            if frame_idx >= n_refs:
-                target_path = target_paths[frame_idx - n_refs]
-                target_img = all_frames[frame_idx]
-                obj_ids = list(getattr(out, "object_ids", []))
-                suppressed = set(getattr(out, "suppressed_obj_ids", []) or [])
-                removed = set(getattr(out, "removed_obj_ids", []) or [])
-                obj_to_mask = getattr(out, "obj_id_to_mask", {}) or {}
-                obj_to_score = getattr(out, "obj_id_to_score", {}) or {}
-                dets: List[_Detection] = []
-                for oid in obj_ids:
-                    if oid in suppressed or oid in removed:
+            with torch.no_grad():
+                # Build conditioning memory on the prompted frame, then propagate
+                model(inference_session=session, frame_idx=0)
+                for out in model.propagate_in_video_iterator(session, start_frame_idx=0):
+                    frame_idx = int(getattr(out, "frame_idx", -1))
+                    target_idx = frame_idx - 1
+                    if target_idx < 0 or target_idx >= len(target_paths):
                         continue
-                    score = float(obj_to_score.get(oid, 0.5))
-                    if score < threshold:
+                    target_path = target_paths[target_idx]
+                    target_img = target_frames[target_idx]
+
+                    pred_masks = getattr(out, "pred_masks", None)
+                    if pred_masks is None:
                         continue
-                    mask = obj_to_mask.get(oid)
-                    if mask is None:
-                        continue
-                    det = _mask_to_detection(mask, score, target_size=target_img.size)
-                    if det is not None:
-                        dets.append(det)
-                results[str(target_path)] = dets
-            frame_idx += 1
+
+                    pm = pred_masks
+                    if hasattr(pm, "float"):
+                        pm = pm.float()
+                    # Shape (num_objs, 1, H, W) or (num_objs, H, W) — logits: >0 means mask
+                    for i in range(pm.shape[0]):
+                        mask = pm[i]
+                        det = _mask_to_detection(mask, confidence=0.75, target_size=target_img.size)
+                        if det is not None:
+                            results[str(target_path)].append(det)
+
+            del session
+            try:
+                import torch as _torch
+                if device.startswith("cuda"):
+                    _torch.cuda.empty_cache()
+            except Exception:  # noqa: BLE001
+                pass
+
+    # Deduplicate overlapping masks from different references (IoU > 0.6 on bboxes)
+    def _bbox_iou(a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> float:
+        ax, ay, aw, ah = a
+        bx, by, bw, bh = b
+        ix1, iy1 = max(ax, bx), max(ay, by)
+        ix2, iy2 = min(ax + aw, bx + bw), min(ay + ah, by + bh)
+        iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
+        inter = iw * ih
+        union = aw * ah + bw * bh - inter
+        return inter / union if union > 0 else 0.0
+
+    for key, dets in results.items():
+        kept: List[_Detection] = []
+        for det in sorted(dets, key=lambda d: -d.area):
+            if all(_bbox_iou(det.bbox, k.bbox) <= 0.6 for k in kept):
+                kept.append(det)
+        results[key] = kept
 
     return results
 
