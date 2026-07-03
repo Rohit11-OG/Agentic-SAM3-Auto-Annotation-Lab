@@ -340,6 +340,120 @@ def _load_image_model(repo_id: str, params: Dict[str, Any]) -> Tuple[Any, Any, s
         return _IMAGE_MODEL_CACHE[cache_key]
 
 
+def segment_fewshot(
+    ref_data: List[Tuple[Path, List[Tuple[int, int, int, int]]]],
+    target_paths: List[Path],
+    class_name: str,
+    model_name: str,
+    params: Dict[str, Any],
+) -> Dict[str, List[_Detection]]:
+    """Few-shot annotation: use manually annotated reference images to propagate masks to target images.
+
+    ref_data: list of (image_path, list_of_bboxes_x1y1x2y2)
+    target_paths: list of unannotated image paths
+    Returns: {str(target_path): [_Detection, ...]}
+    """
+    repo_id = params.get("hf_repo_id") or model_name or "facebook/sam3"
+    model, processor, device, dtype = _load_model(repo_id, params)
+
+    try:
+        import torch  # type: ignore
+        from PIL import Image  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("PIL/torch required") from exc
+
+    def _open(p: Path):
+        with _IMG_LOCK:
+            cached = _LAST_IMG.get(str(p))
+        if cached is not None:
+            return cached
+        img = Image.open(p).convert("RGB")
+        with _IMG_LOCK:
+            _LAST_IMG[str(p)] = img
+            _LAST_IMG_PATH.append(str(p))
+            while len(_LAST_IMG_PATH) > 8:
+                old = _LAST_IMG_PATH.pop(0)
+                _LAST_IMG.pop(old, None)
+        return img
+
+    ref_images = [(_open(p), bboxes) for p, bboxes in ref_data]
+    target_images = [(_open(p), p) for p in target_paths]
+
+    # Build frame list: references first, then targets
+    all_frames = [img for img, _ in ref_images] + [img for img, _ in target_images]
+    n_refs = len(ref_images)
+    threshold = float(params.get("hf_score_threshold", 0.3))
+
+    session = processor.init_video_session(
+        video=all_frames,
+        inference_device=device,
+        dtype=dtype,
+    )
+
+    # Add prompts for reference frames
+    for frame_idx, (_, bboxes) in enumerate(ref_images):
+        if not bboxes:
+            continue
+        # Try point prompt at bbox centers (SAM3 video API)
+        for bbox in bboxes:
+            x1, y1, x2, y2 = bbox
+            cx = (x1 + x2) // 2
+            cy = (y1 + y2) // 2
+            added = False
+            for method_name in ("add_point_prompt", "add_new_point_prompt", "add_new_points_to_video"):
+                fn = getattr(processor, method_name, None)
+                if fn is None:
+                    continue
+                try:
+                    import inspect
+                    sig = inspect.signature(fn)
+                    if "frame_idx" in sig.parameters:
+                        fn(session, frame_idx=frame_idx, points=[[cx, cy]], labels=[1])
+                    else:
+                        fn(session, points=[[cx, cy]], labels=[1])
+                    added = True
+                    break
+                except Exception:  # noqa: BLE001
+                    continue
+            if not added:
+                # Fall back to text prompt on the first reference frame
+                try:
+                    processor.add_text_prompt(session, text=str(class_name))
+                    break
+                except Exception:  # noqa: BLE001
+                    pass
+
+    results: Dict[str, List[_Detection]] = {}
+    with torch.no_grad():
+        frame_idx = 0
+        for out in model.propagate_in_video_iterator(session):
+            if frame_idx >= n_refs:
+                target_path = target_paths[frame_idx - n_refs]
+                target_img = all_frames[frame_idx]
+                obj_ids = list(getattr(out, "object_ids", []))
+                suppressed = set(getattr(out, "suppressed_obj_ids", []) or [])
+                removed = set(getattr(out, "removed_obj_ids", []) or [])
+                obj_to_mask = getattr(out, "obj_id_to_mask", {}) or {}
+                obj_to_score = getattr(out, "obj_id_to_score", {}) or {}
+                dets: List[_Detection] = []
+                for oid in obj_ids:
+                    if oid in suppressed or oid in removed:
+                        continue
+                    score = float(obj_to_score.get(oid, 0.5))
+                    if score < threshold:
+                        continue
+                    mask = obj_to_mask.get(oid)
+                    if mask is None:
+                        continue
+                    det = _mask_to_detection(mask, score, target_size=target_img.size)
+                    if det is not None:
+                        dets.append(det)
+                results[str(target_path)] = dets
+            frame_idx += 1
+
+    return results
+
+
 def segment_box_prompt(
     image_path: Path,
     box: Tuple[int, int, int, int],
@@ -398,15 +512,41 @@ def segment_box_prompt(
     pred_masks = getattr(outputs, "pred_masks", None)
     if pred_masks is None:
         return []
-    # Shape: (batch, N_proposals, H_mask, W_mask). Pick the one with highest mean activation.
-    pm = pred_masks[0]  # (N, H, W)
-    # Score each by sum of positive activations (a cheap quality proxy)
-    scores = pm.float().sum(dim=(-2, -1))
-    best_idx = int(torch.argmax(scores).item())
-    best_mask = pm[best_idx]
-    # Normalise score into [0,1] using sigmoid on raw mean activation as a confidence proxy
-    raw_score = float(scores[best_idx].item())
-    norm = float(torch.sigmoid(torch.tensor(raw_score / (best_mask.numel() or 1))).item())
+    # pred_masks shape: (batch, N_proposals, H_mask, W_mask). Pick best by overlap with user box.
+    pm = pred_masks[0].float()  # (N, H, W)
+    N, H_m, W_m = pm.shape
+    W_img, H_img = image_size
 
-    det = _mask_to_detection(best_mask, confidence=norm, target_size=image_size)
+    # Project user's box into mask coordinates
+    sx = W_m / max(1, W_img)
+    sy = H_m / max(1, H_img)
+    mx1 = max(0, min(W_m - 1, int(x1 * sx)))
+    my1 = max(0, min(H_m - 1, int(y1 * sy)))
+    mx2 = max(0, min(W_m, int(x2 * sx)))
+    my2 = max(0, min(H_m, int(y2 * sy)))
+    if mx2 <= mx1 or my2 <= my1:
+        return []
+
+    bin_all = (pm.sigmoid() > 0.5)  # (N, H, W) bool
+    in_box = bin_all[:, my1:my2, mx1:mx2]
+    overlap_counts = in_box.sum(dim=(-2, -1)).float()
+    total_counts = bin_all.sum(dim=(-2, -1)).float().clamp(min=1.0)
+    # Precision-style score: how much of the mask falls inside the user's box
+    precision = overlap_counts / total_counts
+    # Recall-style score: how much of the box the mask fills
+    box_area = float((mx2 - mx1) * (my2 - my1))
+    recall = overlap_counts / max(1.0, box_area)
+    # Balanced F-like score, favoring recall slightly
+    score = (precision * recall) / (precision + recall).clamp(min=1e-6)
+
+    # Require a non-trivial number of pixels inside the box
+    valid = overlap_counts > 5
+    if not bool(valid.any().item()):
+        return []
+    score = score.masked_fill(~valid, -1.0)
+    best_idx = int(torch.argmax(score).item())
+    best_mask = bin_all[best_idx]
+    conf = float(score[best_idx].item())
+
+    det = _mask_to_detection(best_mask, confidence=conf, target_size=image_size)
     return [det] if det is not None else []

@@ -217,6 +217,7 @@ class AnnotatorGUI:
         filem.add_command(label="Run Pipeline", accelerator="Ctrl+R", command=self._run_pipeline)
         filem.add_command(label="Cancel", accelerator="Esc", command=self._cancel_pipeline)
         filem.add_separator()
+        filem.add_command(label="Clear Session", accelerator="Ctrl+Shift+C", command=self._clear_session)
         filem.add_command(label="Quit", accelerator="Ctrl+Q", command=self._on_close)
         menubar.add_cascade(label="File", menu=filem)
 
@@ -246,6 +247,8 @@ class AnnotatorGUI:
         self.root.bind("<F5>", lambda e: self._run_pipeline())
         self.root.bind("<F1>", lambda e: self._show_hotkey_help())
         self.root.bind("<Control-slash>", lambda e: self._show_hotkey_help())
+        self.root.bind("<Control-Shift-C>", lambda e: self._clear_session())
+        self.root.bind("<Control-Shift-c>", lambda e: self._clear_session())
 
     def _show_about(self) -> None:
         messagebox.showinfo(
@@ -254,6 +257,149 @@ class AnnotatorGUI:
             "Multi-agent auto-labeling with SAM3 + QA.\n\n"
             "Hotkeys: Ctrl+R run | Ctrl+B browse | Ctrl+T theme | Esc cancel",
         )
+
+    def _clear_session(self, confirm: bool = True) -> None:
+        """Reset GUI to fresh state: clear paths, logs, previews, results, labeler.
+
+        Does NOT delete files on disk. Does NOT touch persisted settings file
+        (those reload on next launch unless user explicitly overwrites).
+        """
+        if confirm and not messagebox.askyesno(
+            "Clear session",
+            "Clear all in-GUI state?\n\n"
+            "• Resets dataset / output / prompt fields\n"
+            "• Clears run log, results, previews, labeler\n"
+            "• Does NOT delete any files on disk",
+        ):
+            return
+
+        # Stop any running pipeline first
+        try:
+            if self.worker_thread and self.worker_thread.is_alive():
+                self.cancel_event.set()
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Path / config fields
+        self.dataset_path.set("")
+        self.output_path.set("")
+        for vname in ("prompt_var", "class_label_var", "sam3_prompt_var"):
+            v = getattr(self, vname, None)
+            if v is not None:
+                try:
+                    v.set("")
+                except Exception:  # noqa: BLE001
+                    pass
+        self.filter_var.set("All")
+        self.search_var.set("")
+
+        # State
+        self.last_output_path = None
+        self.last_bundles = None
+        self.last_config = None
+        self._bundle_status = {}
+        self._label_files = {}
+        self._classes = []
+        self._preview_imgref = None
+        self._current_preview_image = None
+        self._current_label_text = ""
+        self._zoom = 1.0
+        self._pan = (0, 0)
+        self.total_images = 0
+        self.processed = 0
+
+        # Text widgets
+        for w_name in ("preview_text", "log_text", "summary_text", "label_content"):
+            w = getattr(self, w_name, None)
+            if w is not None:
+                try:
+                    w.configure(state="normal")
+                    w.delete("1.0", "end")
+                except tk.TclError:
+                    pass
+
+        # Labels list / preview canvas
+        try:
+            self.labels_listbox.delete(0, "end")
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self.preview_canvas.delete("all")
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Dashboard
+        for v in self.dash_card_vars.values():
+            v.set("—")
+        try:
+            self.dash_chart.configure(state="normal")
+            self.dash_chart.delete("1.0", "end")
+            self.dash_chart.configure(state="disabled")
+            self.dash_issues.configure(state="normal")
+            self.dash_issues.delete("1.0", "end")
+            self.dash_issues.configure(state="disabled")
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Results action buttons -> disabled
+        for btn_name in ("open_out_btn", "open_yolo_btn", "export_all_btn",
+                         "export_yolo_all_btn", "save_preview_btn"):
+            b = getattr(self, btn_name, None)
+            if b is not None:
+                try:
+                    b.configure(state="disabled")
+                except tk.TclError:
+                    pass
+
+        # Video tab reset
+        try:
+            for slot in getattr(self, "_video_slots", []):
+                slot["path_var"].set("")
+                slot["info_var"].set("")
+                slot["frames_var"].set(100)
+            self._video_output_var.set("")
+            self._video_log.delete("1.0", "end")
+            self._video_progress.configure(value=0)
+            self._video_status_var.set("Ready. Add videos and click Extract.")
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Labeler tab reset
+        try:
+            lp = self.labeler_panel
+            lp.image_paths = []
+            lp.current_idx = -1
+            lp.current_image_path = None
+            lp.shapes = []
+            lp._history = []
+            lp._cancel_draft()
+            lp._image_obj = None
+            lp._photo = None
+            lp._photo_state = None
+            lp.dirty = False
+            lp.file_list.delete(0, "end")
+            lp.shape_list.delete(0, "end")
+            lp.canvas.delete("all")
+            lp.status_var.set("Cleared.")
+            lp.coords_var.set("x=0 y=0")
+            lp.zoom_var.set("100%")
+            lp.count_var.set("shapes: 0")
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Status / progress
+        self.progress.configure(value=0, maximum=100)
+        self.elapsed_var.set("")
+        self._stop_timer()
+        self._set_running(False)
+        # Set status AFTER _set_running so it's not overridden
+        self.status_var.set("Session cleared.")
+
+        # Jump back to Setup tab
+        try:
+            self.notebook.select(self.setup_tab)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _show_hotkey_help(self) -> None:
         win = tk.Toplevel(self.root)
@@ -453,6 +599,7 @@ class AnnotatorGUI:
         ttk.Button(toolbar, text="\ud83c\udff7 YOLO", command=self._open_yolo).pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Button(toolbar, text="\ud83c\udf13 Theme", command=self._toggle_theme).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="\ud83e\uddf9 Clear", command=self._clear_session).pack(side="left", padx=2)
         ttk.Button(toolbar, text="\u2754 Help (F1)", command=self._show_hotkey_help).pack(side="right", padx=2)
 
         notebook = ttk.Notebook(self.root)
@@ -463,10 +610,12 @@ class AnnotatorGUI:
         self.results_tab = ttk.Frame(notebook)
         self.video_tab = ttk.Frame(notebook)
         self.labeler_tab = ttk.Frame(notebook)
+        self.fewshot_tab = ttk.Frame(notebook)
         notebook.add(self.dashboard_tab, text="Dashboard")
         notebook.add(self.setup_tab, text="Setup")
         notebook.add(self.log_tab, text="Run Log")
         notebook.add(self.results_tab, text="Results")
+        notebook.add(self.fewshot_tab, text="\ud83c\udfaf Few-Shot")
         notebook.add(self.video_tab, text="Video \u2192 Frames")
         notebook.add(self.labeler_tab, text="Labeler")
         self.notebook = notebook
@@ -476,6 +625,7 @@ class AnnotatorGUI:
         self._build_setup_tab()
         self._build_log_tab()
         self._build_results_tab()
+        self._build_fewshot_tab()
         self._build_video_tab()
         self._build_labeler_tab()
 
@@ -618,6 +768,8 @@ class AnnotatorGUI:
         self.export_all_btn.pack(side="left", padx=6)
         self.export_yolo_all_btn = ttk.Button(btns, text="Force export all to YOLO", command=self._export_all_to_yolo, state="normal")
         self.export_yolo_all_btn.pack(side="left", padx=6)
+        self.export_accepted_only_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(btns, text="Accepted only", variable=self.export_accepted_only_var).pack(side="left", padx=(2, 6))
         ttk.Button(btns, text="Toggle theme", command=self._toggle_theme).pack(side="right")
 
         paned = ttk.PanedWindow(frm, orient="horizontal")
@@ -1613,6 +1765,13 @@ class AnnotatorGUI:
             messagebox.showwarning("No annotations", "No images have generated masks to export.")
             return
 
+        accepted_only = self.export_accepted_only_var.get()
+        if accepted_only:
+            bundles = [b for b in bundles if b.status == "ACCEPTED"]
+            if not bundles:
+                messagebox.showwarning("No accepted annotations", "No ACCEPTED annotations found. Uncheck 'Accepted only' to export all.")
+                return
+
         annotated_bundles = [b for b in bundles if b.masks]
         if not annotated_bundles:
             messagebox.showwarning("No annotations", "No images have generated masks to export.")
@@ -1638,11 +1797,12 @@ class AnnotatorGUI:
             self.open_yolo_btn.configure(state="normal")
             self.export_all_btn.configure(state="normal")
             self._load_labels_list()
-            self.status_var.set(f"Exported {len(annotated_bundles)} annotated image(s) to YOLO format.")
+            status_note = " (ACCEPTED only)" if accepted_only else ""
+            self.status_var.set(f"Exported {len(annotated_bundles)} annotated image(s) to YOLO format{status_note}.")
             messagebox.showinfo(
                 "Export complete",
-                f"Successfully exported {len(annotated_bundles)} annotated image(s) "
-                f"(including HUMAN_REVIEW) to:\n{labels_dir}"
+                f"Successfully exported {len(annotated_bundles)} annotated image(s)"
+                f"{status_note} to:\n{labels_dir}"
             )
         except Exception as exc:
             messagebox.showerror("Export failed", str(exc))
@@ -1683,6 +1843,284 @@ class AnnotatorGUI:
                 open_in_explorer(d)
                 return
         open_in_explorer(out)
+
+    # ---------- Few-Shot tab ----------
+    def _build_fewshot_tab(self) -> None:
+        frm = ttk.Frame(self.fewshot_tab, padding=12)
+        frm.pack(fill="both", expand=True)
+
+        ttk.Label(frm, text="🎯 Few-Shot SAM3 Annotator", font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        ttk.Label(
+            frm,
+            text="Annotate a few images manually in Labeler → scan them here → SAM3 propagates masks to all remaining images",
+            foreground="#888888",
+        ).pack(anchor="w", pady=(2, 10))
+
+        paned = ttk.PanedWindow(frm, orient="horizontal")
+        paned.pack(fill="both", expand=True)
+
+        # ── Left: reference images ────────────────────────────────────────────
+        left = ttk.LabelFrame(paned, text="Reference Images (manually annotated)", padding=6)
+        paned.add(left, weight=1)
+
+        ref_ctrl = ttk.Frame(left)
+        ref_ctrl.pack(fill="x", pady=(0, 4))
+        ttk.Button(ref_ctrl, text="🔍 Scan from output folder", command=self._fewshot_scan_refs).pack(side="left")
+        ttk.Button(ref_ctrl, text="✕ Clear", command=self._fewshot_clear_refs).pack(side="left", padx=6)
+        self._fs_ref_count_var = tk.StringVar(value="0 references loaded")
+        ttk.Label(ref_ctrl, textvariable=self._fs_ref_count_var, foreground="#888888").pack(side="left", padx=8)
+
+        ref_list_frm = ttk.Frame(left)
+        ref_list_frm.pack(fill="both", expand=True)
+        ref_scroll = ttk.Scrollbar(ref_list_frm, orient="vertical")
+        self._fs_ref_listbox = tk.Listbox(ref_list_frm, font=("Consolas", 9), yscrollcommand=ref_scroll.set, selectmode="extended")
+        ref_scroll.config(command=self._fs_ref_listbox.yview)
+        ref_scroll.pack(side="right", fill="y")
+        self._fs_ref_listbox.pack(fill="both", expand=True)
+
+        # ── Right: targets + settings ─────────────────────────────────────────
+        right = ttk.Frame(paned, padding=6)
+        paned.add(right, weight=1)
+
+        ttk.Label(right, text="Target Images (unannotated)", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        self._fs_target_count_var = tk.StringVar(value="0 targets found")
+        ttk.Label(right, textvariable=self._fs_target_count_var, foreground="#555555").pack(anchor="w", pady=(2, 8))
+
+        tgt_list_frm = ttk.Frame(right)
+        tgt_list_frm.pack(fill="both", expand=True)
+        tgt_scroll = ttk.Scrollbar(tgt_list_frm, orient="vertical")
+        self._fs_target_listbox = tk.Listbox(tgt_list_frm, font=("Consolas", 9), yscrollcommand=tgt_scroll.set)
+        tgt_scroll.config(command=self._fs_target_listbox.yview)
+        tgt_scroll.pack(side="right", fill="y")
+        self._fs_target_listbox.pack(fill="both", expand=True)
+
+        # Settings
+        opts = ttk.LabelFrame(right, text="Settings", padding=6)
+        opts.pack(fill="x", pady=(10, 0))
+        ttk.Label(opts, text="Class name:").grid(row=0, column=0, sticky="w")
+        self._fs_class_var = tk.StringVar(value="object")
+        ttk.Entry(opts, textvariable=self._fs_class_var, width=20).grid(row=0, column=1, sticky="w", padx=(6, 0))
+        ttk.Label(opts, text="Confidence threshold:").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self._fs_conf_var = tk.StringVar(value="0.3")
+        ttk.Entry(opts, textvariable=self._fs_conf_var, width=8).grid(row=1, column=1, sticky="w", padx=(6, 0), pady=(4, 0))
+
+        # Run button + progress
+        run_frm = ttk.Frame(frm)
+        run_frm.pack(fill="x", pady=(10, 0))
+        self._fs_run_btn = ttk.Button(run_frm, text="▶ Run Few-Shot SAM3", style="Accent.TButton", command=self._fewshot_run)
+        self._fs_run_btn.pack(side="left")
+        self._fs_cancel_var = tk.BooleanVar(value=False)
+        self._fs_cancel_btn = ttk.Button(run_frm, text="⏹ Cancel", command=lambda: self._fs_cancel_var.set(True), state="disabled")
+        self._fs_cancel_btn.pack(side="left", padx=6)
+        self._fs_status_var = tk.StringVar(value="")
+        ttk.Label(run_frm, textvariable=self._fs_status_var, foreground="#555555").pack(side="left", padx=10)
+
+        self._fs_progress_var = tk.DoubleVar(value=0.0)
+        self._fs_progress = ttk.Progressbar(frm, variable=self._fs_progress_var, maximum=100)
+        self._fs_progress.pack(fill="x", pady=(6, 0))
+
+        # Internal state
+        self._fs_refs: List[Tuple[Path, List[Tuple[int, int, int, int]]]] = []  # (img_path, [bboxes])
+        self._fs_targets: List[Path] = []
+
+    def _fewshot_scan_refs(self) -> None:
+        """Scan output folder for annotated images → load as references."""
+        out_dir = self._resolve_output_dir()
+        dataset_dir = Path(self.dataset_path.get().strip() or "")
+        if not out_dir or not out_dir.exists():
+            messagebox.showwarning("No output folder", "Set the output folder in Setup tab first.")
+            return
+
+        labels_dir = out_dir / "labels"
+        if not labels_dir.exists():
+            messagebox.showwarning("No labels", f"No labels/ folder found in:\n{out_dir}\nRun pipeline or annotate images first.")
+            return
+
+        refs = []
+        for lf in sorted(labels_dir.glob("*.txt")):
+            stem = lf.stem
+            lines = [l.strip() for l in lf.read_text(encoding="utf-8").splitlines() if l.strip()]
+            if not lines:
+                continue
+            # Find image
+            img_path = None
+            if dataset_dir.exists():
+                for ext in IMAGE_EXTS:
+                    candidates = list(dataset_dir.rglob(f"{stem}{ext}"))
+                    if candidates:
+                        img_path = candidates[0]
+                        break
+            if img_path is None:
+                continue
+            # Parse YOLO bboxes (normalized cx cy w h → pixel x1y1x2y2)
+            try:
+                from PIL import Image as _PILImg
+                with _PILImg.open(img_path) as im:
+                    W, H = im.size
+            except Exception:
+                continue
+            bboxes = []
+            for line in lines:
+                parts = line.split()
+                if len(parts) < 5:
+                    continue
+                try:
+                    cx, cy, bw, bh = float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])
+                    x1 = int((cx - bw / 2) * W)
+                    y1 = int((cy - bh / 2) * H)
+                    x2 = int((cx + bw / 2) * W)
+                    y2 = int((cy + bh / 2) * H)
+                    bboxes.append((max(0, x1), max(0, y1), min(W, x2), min(H, y2)))
+                except Exception:
+                    continue
+            if bboxes:
+                refs.append((img_path, bboxes))
+
+        if not refs:
+            messagebox.showwarning("No references found", "No annotated images found in labels folder.\nAnnotate some images in Labeler or run pipeline first.")
+            return
+
+        self._fs_refs = refs
+        self._fs_ref_listbox.delete(0, "end")
+        for p, bboxes in refs:
+            self._fs_ref_listbox.insert("end", f"[{len(bboxes)} box{'es' if len(bboxes)!=1 else ''}]  {p.name}")
+        self._fs_ref_count_var.set(f"{len(refs)} reference(s) loaded")
+
+        # Scan targets: images NOT in refs
+        ref_stems = {p.stem for p, _ in refs}
+        all_images = []
+        if dataset_dir.exists():
+            for ext in IMAGE_EXTS:
+                all_images.extend(dataset_dir.rglob(f"*{ext}"))
+        targets = sorted(set(p for p in all_images if p.stem not in ref_stems))
+        self._fs_targets = targets
+        self._fs_target_listbox.delete(0, "end")
+        for p in targets:
+            self._fs_target_listbox.insert("end", p.name)
+        self._fs_target_count_var.set(f"{len(targets)} target image(s) to annotate")
+
+    def _fewshot_clear_refs(self) -> None:
+        self._fs_refs = []
+        self._fs_targets = []
+        self._fs_ref_listbox.delete(0, "end")
+        self._fs_target_listbox.delete(0, "end")
+        self._fs_ref_count_var.set("0 references loaded")
+        self._fs_target_count_var.set("0 targets found")
+        self._fs_status_var.set("")
+        self._fs_progress_var.set(0.0)
+
+    def _fewshot_run(self) -> None:
+        if not self._fs_refs:
+            messagebox.showwarning("No references", "Scan references first.")
+            return
+        if not self._fs_targets:
+            messagebox.showwarning("No targets", "No unannotated target images found.")
+            return
+
+        out_dir = self._resolve_output_dir()
+        dataset_dir = Path(self.dataset_path.get().strip() or "")
+        if not out_dir:
+            messagebox.showwarning("No output folder", "Set output folder in Setup tab.")
+            return
+
+        class_name = self._fs_class_var.get().strip() or "object"
+        try:
+            conf = float(self._fs_conf_var.get().strip())
+        except ValueError:
+            conf = 0.3
+
+        params = {
+            "backend": "hf_local",
+            "local_dir": "./models/sam3",
+            "hf_score_threshold": conf,
+            "allow_mock_fallback": True,
+        }
+
+        refs = list(self._fs_refs)
+        targets = list(self._fs_targets)
+        total = len(targets)
+
+        self._fs_run_btn.configure(state="disabled")
+        self._fs_cancel_btn.configure(state="normal")
+        self._fs_cancel_var.set(False)
+        self._fs_progress_var.set(0.0)
+        self._fs_status_var.set(f"Starting few-shot run on {total} images…")
+
+        import threading as _threading
+
+        def _worker():
+            from src.tools.sam3 import sam3_segment_fewshot
+            from src.tools.yolo.exporter import export_yolo
+            from src.core.models import AnnotationBundle, ImageRecord, MaskRecord, new_mask_id, ProjectConfig
+            import time
+
+            labels_dir = out_dir / "labels"
+            labels_dir.mkdir(parents=True, exist_ok=True)
+
+            # Process in batches of 8 to avoid OOM
+            BATCH = 8
+            all_results = {}
+            for batch_start in range(0, total, BATCH):
+                if self._fs_cancel_var.get():
+                    break
+                batch = targets[batch_start: batch_start + BATCH]
+                self.root.after(0, lambda s=batch_start: self._fs_status_var.set(
+                    f"Processing {s+1}–{min(s+BATCH, total)}/{total}…"
+                ))
+                try:
+                    batch_res = sam3_segment_fewshot(
+                        ref_data=refs,
+                        target_paths=batch,
+                        class_name=class_name,
+                        model_name="facebook/sam3",
+                        params=params,
+                    )
+                    all_results.update(batch_res)
+                except Exception as exc:
+                    self.root.after(0, lambda e=str(exc): messagebox.showerror("Few-shot error", e))
+                    break
+                pct = min(100.0, (batch_start + len(batch)) / total * 100)
+                self.root.after(0, lambda p=pct: self._fs_progress_var.set(p))
+
+            # Write YOLO label files
+            written = 0
+            for p in targets:
+                masks = all_results.get(str(p), [])
+                if not masks:
+                    continue
+                label_path = labels_dir / f"{p.stem}.txt"
+                lines = []
+                try:
+                    from PIL import Image as _PI
+                    with _PI.open(p) as im:
+                        W, H = im.size
+                except Exception:
+                    continue
+                for m in masks:
+                    if m.polygon and len(m.polygon) >= 3:
+                        coords = " ".join(f"{x/W:.6f} {y/H:.6f}" for x, y in m.polygon)
+                        lines.append(f"0 {coords}")
+                    elif m.bbox:
+                        x1, y1, bw, bh = m.bbox
+                        cx = (x1 + bw / 2) / W
+                        cy = (y1 + bh / 2) / H
+                        lines.append(f"0 {cx:.6f} {cy:.6f} {bw/W:.6f} {bh/H:.6f}")
+                if lines:
+                    label_path.write_text("\n".join(lines), encoding="utf-8")
+                    written += 1
+
+            cancelled = self._fs_cancel_var.get()
+            def _done():
+                self._fs_run_btn.configure(state="normal")
+                self._fs_cancel_btn.configure(state="disabled")
+                self._fs_progress_var.set(100.0 if not cancelled else self._fs_progress_var.get())
+                msg = f"Cancelled. " if cancelled else ""
+                self._fs_status_var.set(f"{msg}Done. {written}/{total} images annotated → {labels_dir}")
+                if written > 0:
+                    messagebox.showinfo("Few-Shot Complete", f"Annotated {written} of {total} target images.\nLabels saved to:\n{labels_dir}")
+            self.root.after(0, _done)
+
+        _threading.Thread(target=_worker, daemon=True).start()
 
     # ---------- Video -> Frames tab ----------
     def _build_video_tab(self) -> None:

@@ -319,6 +319,8 @@ class LabelerPanel(ttk.Frame):
             self.file_list.selection_clear(0, "end")
             self.file_list.selection_set(self.current_idx)
             return
+        if idx >= len(self.image_paths):
+            return
         self.current_idx = idx
         self._load_image(self.image_paths[idx])
 

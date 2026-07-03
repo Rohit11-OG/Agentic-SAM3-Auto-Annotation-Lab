@@ -304,6 +304,50 @@ def sam3_segment_exemplar_prompt(
     return _mock_exemplar_prompt(exemplar_bbox, params)
 
 
+def sam3_segment_fewshot(
+    ref_data: List[Tuple[Path, List[Tuple[int, int, int, int]]]],
+    target_paths: List[Path],
+    class_name: str,
+    model_name: str,
+    params: Dict[str, Any],
+) -> Dict[str, List[RawMask]]:
+    """Few-shot: ref images with bboxes → SAM3 propagates masks to target images.
+
+    Returns {str(path): [RawMask, ...]} for each target image.
+    """
+    backend = str(params.get("backend", "mock")).lower()
+    if backend == "hf_local":
+        try:
+            from src.tools.sam3.hf_backend import segment_fewshot as _hf_fewshot
+            raw = _hf_fewshot(ref_data, target_paths, class_name, model_name, params)
+            return {
+                k: [RawMask(polygon=d.polygon, bbox=d.bbox, area=d.area, confidence=d.confidence) for d in v]
+                for k, v in raw.items()
+            }
+        except Exception as exc:  # noqa: BLE001
+            if not params.get("allow_mock_fallback", True):
+                raise
+            import warnings
+            warnings.warn(f"SAM3 few-shot failed; falling back to mock. Reason: {exc}", stacklevel=2)
+
+    # Mock fallback: use bboxes from first reference for all targets
+    mock_bboxes = ref_data[0][1] if ref_data else []
+    result: Dict[str, List[RawMask]] = {}
+    for p in target_paths:
+        masks = []
+        for bbox in mock_bboxes:
+            x1, y1, x2, y2 = bbox
+            w, h = max(1, x2 - x1), max(1, y2 - y1)
+            masks.append(RawMask(
+                polygon=[(x1, y1), (x2, y1), (x2, y2), (x1, y2)],
+                bbox=(x1, y1, w, h),
+                area=float(w * h),
+                confidence=0.6,
+            ))
+        result[str(p)] = masks
+    return result
+
+
 def sam3_segment_box_prompt(
     image_path: Path,
     box: Tuple[int, int, int, int],

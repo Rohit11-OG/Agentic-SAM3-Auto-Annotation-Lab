@@ -77,7 +77,7 @@ def test_load_json_missing_returns_empty(tmp_path: Path) -> None:
 
 # ---------- AnnotatorGUI structure ----------
 def test_gui_builds(gui) -> None:
-    assert int(gui.notebook.index("end")) == 6  # Dashboard, Setup, Run Log, Results, Video→Frames, Labeler
+    assert int(gui.notebook.index("end")) == 7  # Dashboard, Setup, Run Log, Results, Few-Shot, Video→Frames, Labeler
     assert str(gui.run_btn["state"]) == "normal"
     assert str(gui.cancel_btn["state"]) == "disabled"
     assert "labels_listbox" in dir(gui)
@@ -760,3 +760,35 @@ def test_hotkey_help_opens_and_closes(gui) -> None:
     tops = [w for w in gui.root.winfo_children() if isinstance(w, tk.Toplevel)]
     assert tops, "help dialog Toplevel not found"
     tops[-1].destroy()
+
+
+def test_clear_session_resets_state(gui, tmp_path: Path) -> None:
+    # Populate some state
+    gui.dataset_path.set(str(tmp_path))
+    gui.output_path.set(str(tmp_path / "out"))
+    gui.class_label_var.set("car, truck")
+    gui.sam3_prompt_var.set("vehicle")
+    gui.last_output_path = tmp_path
+    gui._bundle_status = {"img_a": "ACCEPTED"}
+    gui._label_files = {"img_a": tmp_path / "img_a.txt"}
+    gui.dash_card_vars["total"].set("42")
+    gui.preview_text.insert("end", "junk")
+    gui.log_text.insert("end", "junk")
+    gui.summary_text.insert("end", "junk")
+
+    # Confirm-skip
+    gui._clear_session(confirm=False)
+    gui.root.update_idletasks()
+
+    assert gui.dataset_path.get() == ""
+    assert gui.output_path.get() == ""
+    assert gui.class_label_var.get() == ""
+    assert gui.sam3_prompt_var.get() == ""
+    assert gui.last_output_path is None
+    assert gui._bundle_status == {}
+    assert gui._label_files == {}
+    assert gui.dash_card_vars["total"].get() == "—"
+    assert gui.preview_text.get("1.0", "end").strip() == ""
+    assert gui.log_text.get("1.0", "end").strip() == ""
+    assert gui.summary_text.get("1.0", "end").strip() == ""
+    assert gui.status_var.get() == "Session cleared."
