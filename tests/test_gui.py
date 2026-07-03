@@ -883,3 +883,84 @@ def test_labeler_delete_vertex(labeler, tmp_path: Path) -> None:
     cx2, cy2 = labeler._image_to_canvas(10, 10)
     labeler._on_right_click(FakeEvent(cx2, cy2))
     assert len(labeler.shapes[0].points) == 3
+
+
+def test_labeler_labelme_navigation_hotkeys(labeler, tmp_path: Path) -> None:
+    img1 = tmp_path / "img1.jpg"
+    img2 = tmp_path / "img2.jpg"
+    Image.new("RGB", (100, 100)).save(img1)
+    Image.new("RGB", (100, 100)).save(img2)
+    labeler.image_paths = [img1, img2]
+    labeler.current_idx = 0
+    labeler._load_image(img1)
+
+    binds = labeler.canvas.bind()
+    assert "a" in binds
+    assert "d" in binds
+
+    labeler._next_image()
+    assert labeler.current_idx == 1
+
+    labeler._prev_image()
+    assert labeler.current_idx == 0
+
+
+def test_labeler_labelme_tool_hotkeys(labeler) -> None:
+    binds = " ".join(labeler.canvas.bind())
+    assert "Control-Key-n" in binds or "Control-Key-N" in binds or "<Control-n>" in binds
+    assert "Control-Key-r" in binds or "Control-Key-R" in binds or "<Control-r>" in binds
+    assert "Control-Key-e" in binds or "Control-Key-E" in binds or "<Control-e>" in binds
+
+
+def test_labeler_polygon_start_vertex_closure(labeler, tmp_path: Path, monkeypatch) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.mode.set("polygon")
+
+    labeler._draft_points = [(10, 10), (50, 10), (50, 50)]
+    cx0, cy0 = labeler._image_to_canvas(10, 10)
+
+    class FakeEvent:
+        def __init__(self, x, y, state=0):
+            self.x = x
+            self.y = y
+            self.state = state
+
+    monkeypatch.setattr(labeler, "_prompt_label", lambda default: "triangle")
+
+    labeler._on_click(FakeEvent(cx0, cy0))
+    
+    assert len(labeler.shapes) == 1
+    assert labeler.shapes[0].kind == "polygon"
+    assert labeler.shapes[0].label == "triangle"
+    assert len(labeler._draft_points) == 0
+
+
+def test_labeler_label_prompt_dialog(labeler, tmp_path: Path, monkeypatch) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+
+    monkeypatch.setattr(labeler, "_prompt_label", lambda default_label: "custom_label")
+    
+    labeler.mode.set("rectangle")
+    sx, sy = labeler._image_to_canvas(10, 10)
+    ex, ey = labeler._image_to_canvas(50, 50)
+    
+    class FakeEvent:
+        def __init__(self, x, y, state=0):
+            self.x = x
+            self.y = y
+            self.state = state
+
+    labeler._on_click(FakeEvent(sx, sy))
+    labeler._on_release(FakeEvent(ex, ey))
+
+    assert len(labeler.shapes) == 1
+    assert labeler.shapes[0].label == "custom_label"
+    assert "custom_label" in labeler.classes
