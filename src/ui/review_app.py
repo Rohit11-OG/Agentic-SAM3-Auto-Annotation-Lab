@@ -2031,7 +2031,7 @@ class AnnotatorGUI:
         ttk.Label(frm, text="🎯 Few-Shot SAM3 Annotator", font=("Segoe UI", 13, "bold")).pack(anchor="w")
         ttk.Label(
             frm,
-            text="Annotate a few images manually in Labeler → scan them here → SAM3 propagates masks to all remaining images",
+            text="Annotate a few images in Labeler (Save writes .json) → Scan annotations → SAM3 propagates masks to all remaining images",
             foreground="#888888",
         ).pack(anchor="w", pady=(2, 10))
 
@@ -2044,7 +2044,7 @@ class AnnotatorGUI:
 
         ref_ctrl = ttk.Frame(left)
         ref_ctrl.pack(fill="x", pady=(0, 4))
-        ttk.Button(ref_ctrl, text="🔍 Scan from output folder", command=self._fewshot_scan_refs).pack(side="left")
+        ttk.Button(ref_ctrl, text="🔍 Scan annotations", command=self._fewshot_scan_refs).pack(side="left")
         ttk.Button(ref_ctrl, text="✕ Clear", command=self._fewshot_clear_refs).pack(side="left", padx=6)
         self._fs_ref_count_var = tk.StringVar(value="0 references loaded")
         ttk.Label(ref_ctrl, textvariable=self._fs_ref_count_var, foreground="#888888").pack(side="left", padx=8)
@@ -2103,28 +2103,62 @@ class AnnotatorGUI:
         self._fs_targets: List[Path] = []
 
     def _fewshot_scan_refs(self) -> None:
-        """Scan output folder for annotated images → load as references."""
+        """Scan for annotated references: Labeler's LabelMe JSONs (next to images)
+        win over pipeline YOLO labels in the output folder."""
         out_dir = self._resolve_output_dir()
         dataset_dir = Path(self.dataset_path.get().strip() or "")
-        if not out_dir or not out_dir.exists():
-            messagebox.showwarning("No output folder", "Set the output folder in Setup tab first.")
-            return
-
-        labels_dir = None
-        for cand in ("yolo_seg_labels", "yolo_labels", "labels"):
-            d = out_dir / cand
-            if d.exists():
-                labels_dir = d
-                break
-        if labels_dir is None:
-            messagebox.showwarning("No labels", f"No label folder found in:\n{out_dir}\nRun pipeline or annotate images first.")
+        if not dataset_dir.exists():
+            messagebox.showwarning("No dataset folder", "Set the dataset folder in Setup tab first.")
             return
 
         refs = []
-        for lf in sorted(labels_dir.glob("*.txt")):
+        ref_stems_seen = set()
+
+        # 1. LabelMe JSONs saved by the Labeler (points already in pixels)
+        for jf in sorted(dataset_dir.rglob("*.json")):
+            try:
+                data = json.loads(jf.read_text(encoding="utf-8"))
+                shapes = data.get("shapes") or []
+            except Exception:  # noqa: BLE001
+                continue
+            img_path = None
+            for ext in IMAGE_EXTS:
+                p = jf.with_suffix(ext)
+                if p.exists():
+                    img_path = p
+                    break
+            if img_path is None or not shapes:
+                continue
+            bboxes = []
+            for shp in shapes:
+                pts = shp.get("points") or []
+                if len(pts) < 2:
+                    continue
+                xs = [float(pt[0]) for pt in pts]
+                ys = [float(pt[1]) for pt in pts]
+                bboxes.append((int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))))
+            if bboxes:
+                refs.append((img_path, bboxes))
+                ref_stems_seen.add(img_path.stem)
+
+        # 2. Pipeline YOLO labels
+        labels_dir = None
+        if out_dir and out_dir.exists():
+            for cand in ("yolo_seg_labels", "yolo_labels", "labels"):
+                d = out_dir / cand
+                if d.exists():
+                    labels_dir = d
+                    break
+        if labels_dir is None and not refs:
+            messagebox.showwarning("No labels", "No annotations found.\nAnnotate images in Labeler (Save writes .json next to image)\nor run the pipeline first.")
+            return
+
+        for lf in sorted(labels_dir.glob("*.txt")) if labels_dir else []:
             if lf.name == "classes.txt":
                 continue
             stem = lf.stem
+            if stem in ref_stems_seen:
+                continue
             lines = [line.strip() for line in lf.read_text(encoding="utf-8").splitlines() if line.strip()]
             if not lines:
                 continue
@@ -2173,7 +2207,7 @@ class AnnotatorGUI:
                 refs.append((img_path, bboxes))
 
         if not refs:
-            messagebox.showwarning("No references found", f"No annotated images found in labels folder ({labels_dir.name}).\nAnnotate some images in Labeler or run pipeline first.")
+            messagebox.showwarning("No references found", "No annotations found.\nAnnotate images in Labeler (Save writes .json next to image)\nor run the pipeline first.")
             return
 
         self._fs_refs = refs
