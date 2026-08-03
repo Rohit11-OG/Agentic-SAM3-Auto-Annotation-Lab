@@ -2274,18 +2274,30 @@ class AnnotatorGUI:
             messagebox.showwarning("No output folder", "Set output folder in Setup tab.")
             return
 
-        class_name = self._fs_class_var.get().strip() or "object"
         try:
             conf = float(self._fs_conf_var.get().strip())
         except ValueError:
             conf = 0.3
 
-        params = {
+        # Take the model location from the loaded config when there is one — a
+        # bare "./models/sam3" only resolves when the GUI happens to be launched
+        # from the project root. Mock fallback stays off: silently returning
+        # fabricated masks here would look exactly like a successful run.
+        params: Dict[str, Any] = {"local_dir": "./models/sam3"}
+        if self.last_config and self.last_config.sam3_params:
+            params.update(self.last_config.sam3_params)
+        else:
+            cfg_path = self.config_path.get().strip()
+            if cfg_path and Path(cfg_path).exists():
+                try:
+                    params.update(load_project_config(Path(cfg_path)).sam3_params)
+                except Exception:  # noqa: BLE001
+                    pass
+        params.update({
             "backend": "hf_local",
-            "local_dir": "./models/sam3",
             "hf_score_threshold": conf,
-            "allow_mock_fallback": True,
-        }
+            "allow_mock_fallback": False,
+        })
 
         refs = list(self._fs_refs)
         targets = list(self._fs_targets)
@@ -2693,6 +2705,35 @@ class AnnotatorGUI:
         self._video_worker.start()
 
     def _on_close(self) -> None:
+        # Unsaved manual annotations would be lost silently otherwise — the
+        # Labeler guards its own navigation, but not the window closing.
+        panel = getattr(self, "labeler_panel", None)
+        if panel is not None and getattr(panel, "dirty", False):
+            ans = messagebox.askyesnocancel(
+                "Unsaved annotations",
+                "The Labeler has unsaved annotations.\nSave them before closing?",
+            )
+            if ans is None:
+                return
+            if ans:
+                try:
+                    panel._save_json()
+                except Exception as exc:  # noqa: BLE001
+                    if not messagebox.askokcancel("Save failed", f"{exc}\n\nClose anyway?"):
+                        return
+
+        # The pipeline worker is a daemon thread: closing mid-run kills it at
+        # interpreter exit, which can truncate a log/report being written.
+        if self.worker_thread and self.worker_thread.is_alive():
+            if not messagebox.askokcancel(
+                "Pipeline running",
+                "A run is still in progress. Closing now may leave the output "
+                "folder incomplete.\n\nClose anyway?",
+            ):
+                return
+            self.cancel_event.set()
+            self.worker_thread.join(timeout=5.0)
+
         # Persist settings
         try:
             data = {

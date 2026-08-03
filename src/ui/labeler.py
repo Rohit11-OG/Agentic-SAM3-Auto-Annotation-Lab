@@ -12,8 +12,6 @@ Compatible with LabelMe `<image>.json` shape files.
 
 from __future__ import annotations
 
-import base64
-import io
 import json
 import threading
 from pathlib import Path
@@ -976,19 +974,15 @@ class LabelerPanel(ttk.Frame):
         if self.current_image_path is None or self._image_obj is None:
             return
         json_path = self.current_image_path.with_suffix(".json")
-        try:
-            buf = io.BytesIO()
-            self._image_obj.save(buf, format="JPEG", quality=80)
-            img_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-        except Exception:  # noqa: BLE001
-            img_b64 = None
-
         data = {
             "version": "5.4.1",
             "flags": {},
             "shapes": [s.to_labelme() for s in self.shapes],
             "imagePath": self.current_image_path.name,
-            "imageData": img_b64,
+            # Left null to match the pipeline exporter. The JSON is written next
+            # to its image, so LabelMe resolves it via imagePath — embedding a
+            # re-encoded base64 copy only bloated every file.
+            "imageData": None,
             "imageHeight": self._image_size[1],
             "imageWidth": self._image_size[0],
         }
