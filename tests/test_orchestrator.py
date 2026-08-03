@@ -106,3 +106,31 @@ def test_orchestrator_custom_prompt(tmp_path: Path) -> None:
     classes_file = config.output_path / "classes.txt"
     assert classes_file.exists()
     assert classes_file.read_text(encoding="utf-8").splitlines() == ["box"]
+
+
+def test_discover_images_excludes_output_dir(tmp_path):
+    """Output nested in the dataset must not be re-annotated on the next run.
+
+    The exporters copy each image next to its label file, so a recursive scan
+    would otherwise pick those copies up and multiply the work every run.
+    """
+    from PIL import Image
+
+    for name in ("a.jpg", "b.jpg"):
+        Image.new("RGB", (8, 8)).save(tmp_path / name)
+
+    # Simulate a previous run that exported into the dataset folder
+    out = tmp_path / "annotations"
+    (out / "yolo_seg_labels").mkdir(parents=True)
+    for name in ("a.jpg", "b.jpg"):
+        Image.new("RGB", (8, 8)).save(out / "yolo_seg_labels" / name)
+
+    records = discover_images(tmp_path, exclude=out)
+    assert [r.path.name for r in records] == ["a.jpg", "b.jpg"]
+    # ids stay positional over the originals only
+    assert [r.id for r in records] == ["img_00000", "img_00001"]
+
+    # Export subfolders are skipped even without an explicit exclude, which is
+    # what saves the common case of output_path being the dataset folder itself.
+    assert [r.path.name for r in discover_images(tmp_path)] == ["a.jpg", "b.jpg"]
+    assert [r.path.name for r in discover_images(tmp_path, exclude=tmp_path)] == ["a.jpg", "b.jpg"]

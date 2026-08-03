@@ -97,7 +97,7 @@ def main() -> int:
     log = logging.getLogger(__name__)
 
     if args.dry_run:
-        images = discover_images(config.dataset_path)
+        images = discover_images(config.dataset_path, exclude=config.output_path)
         log.info(
             "DRY-RUN: project=%s dataset=%s images=%d classes=%s workers=%d retries=%d",
             config.project_name,
