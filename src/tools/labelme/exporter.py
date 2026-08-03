@@ -6,6 +6,7 @@ import shutil
 from typing import List
 
 from src.core.models import AnnotationBundle
+from src.tools.yolo.exporter import _prune_stale_exports
 
 
 def export_labelme(
@@ -81,15 +82,5 @@ def export_labelme(
         json_file = labelme_dir / f"{stem}.json"
         json_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
-    # Cleanup orphaned label files in labelme_dir if the image next to it was deleted
-    for json_file in labelme_dir.glob("*.json"):
-        stem = json_file.stem
-        has_img = False
-        for ext in [".jpg", ".jpeg", ".png", ".bmp", ".webp"]:
-            if (labelme_dir / f"{stem}{ext}").exists():
-                has_img = True
-                break
-        if not has_img:
-            json_file.unlink()
-
+    _prune_stale_exports(labelme_dir, "*.json", bundles)
     return labelme_dir

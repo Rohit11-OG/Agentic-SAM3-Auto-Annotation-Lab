@@ -1,10 +1,43 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import shutil
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Set
 
 from src.core.models import AnnotationBundle
+
+LOGGER = logging.getLogger(__name__)
+
+IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".bmp", ".webp"]
+
+
+def _prune_stale_exports(
+    export_dir: Path,
+    label_glob: str,
+    bundles: List[AnnotationBundle],
+    keep: Optional[Set[str]] = None,
+) -> None:
+    """Drop label/image pairs this exporter wrote for images no longer in the run.
+
+    The exporters copy every image next to its label, so a stem with a copied
+    image beside it is one we own and may prune. A label file *without* that
+    copy is somebody else's — a hand-made label, or another tool's output — and
+    must be left alone, otherwise pointing output at an existing labels folder
+    would quietly destroy its contents.
+    """
+    keep = keep or set()
+    current = {b.image.path.stem for b in bundles}
+    for label_file in export_dir.glob(label_glob):
+        if label_file.name in keep or label_file.stem in current:
+            continue
+        copies = [export_dir / f"{label_file.stem}{ext}" for ext in IMAGE_EXTS]
+        copies = [c for c in copies if c.exists()]
+        if not copies:
+            continue  # no image copy beside it -> not ours, don't touch
+        label_file.unlink()
+        for c in copies:
+            c.unlink()
 
 
 def export_yolo(
@@ -28,6 +61,7 @@ def export_yolo(
     else:
         classes = sorted({mask.class_id for bundle in targets for mask in bundle.masks})
     class_to_id: Dict[str, int] = {name: i for i, name in enumerate(classes)}
+    dropped: Set[str] = set()
 
     for bundle in targets:
         stem = bundle.image.path.stem
@@ -55,6 +89,7 @@ def export_yolo(
         height = max(bundle.image.height, 1)
         for mask in bundle.masks:
             if mask.class_id not in class_to_id:
+                dropped.add(mask.class_id)
                 continue
             cid = class_to_id[mask.class_id]
 
@@ -84,18 +119,14 @@ def export_yolo(
         label_file = labels_dir / f"{stem}.txt"
         label_file.write_text("\n".join(lines), encoding="utf-8")
 
-    # Cleanup orphaned label files in labels_dir if the image next to it was deleted
-    for label_file in labels_dir.glob("*.txt"):
-        if label_file.name == "classes.txt":
-            continue
-        stem = label_file.stem
-        has_img = False
-        for ext in [".jpg", ".jpeg", ".png", ".bmp", ".webp"]:
-            if (labels_dir / f"{stem}{ext}").exists():
-                has_img = True
-                break
-        if not has_img:
-            label_file.unlink()
+    if dropped:
+        LOGGER.warning(
+            "Dropped masks for %d class(es) missing from label_schema: %s. "
+            "Add them to label_schema to export these annotations.",
+            len(dropped), ", ".join(sorted(dropped)),
+        )
+
+    _prune_stale_exports(labels_dir, "*.txt", bundles, keep={"classes.txt"})
 
     classes_file = output_path / "classes.txt"
     classes_file.write_text("\n".join(classes), encoding="utf-8")
