@@ -34,6 +34,22 @@ class SAM3Agent(BaseAgent):
                 return action
         return {}
 
+    def _retry_params(self, retry_count: int) -> Dict[str, Any]:
+        """Params that make a retry actually differ from the attempt before it.
+
+        The real SAM3 backend reads only ``hf_score_threshold``, so without
+        loosening it a retry re-runs the identical prompt on the identical image
+        and produces identical masks — burning a full inference pass to fail the
+        same QA check again. ``retry_mode``/``retry_seed_bump`` are kept for the
+        mock backend, which is the only thing that reads them.
+        """
+        base = float(self.default_params.get("hf_score_threshold", 0.4))
+        return {
+            "hf_score_threshold": max(0.05, base - 0.1 * retry_count),
+            "retry_mode": True,
+            "retry_seed_bump": retry_count,
+        }
+
     def respond(self, bundle: AnnotationBundle) -> ConversationMessage:
         request = self._extract_request(bundle)
         classes = request.get("classes", [])
@@ -54,22 +70,14 @@ class SAM3Agent(BaseAgent):
 
         generated_masks: List[MaskRecord] = []
 
-        # Multi-class text prompts -> single-session call (saves image encoding)
+        # Multi-class text prompts -> single-session call (saves image encoding).
+        # "|"-separated variants ("defect|paint mark|stain") are tried inside that
+        # same session by the backend, so fallbacks cost no extra image encoding.
         if text_classes:
-            # Each prompt may hold "|"-separated variants ("defect|paint mark|stain"):
-            # try them in order until one yields masks for that class.
-            class_variants: Dict[str, List[str]] = {}
-            for cls in text_classes:
-                raw_prompt = per_class_prompt.get(cls, cls)
-                variants = [v.strip() for v in str(raw_prompt).split("|") if v.strip()]
-                class_variants[cls] = variants or [cls]
-
-            class_prompts = [(cls, class_variants[cls][0]) for cls in text_classes]
-            # Per-class hints currently only affect retry; merge once for the batch
+            class_prompts = [(cls, str(per_class_prompt.get(cls, cls))) for cls in text_classes]
             merged_params = {**self.default_params}
             if bundle.retry_count > 0:
-                merged_params.setdefault("retry_mode", True)
-                merged_params.setdefault("retry_seed_bump", bundle.retry_count)
+                merged_params.update(self._retry_params(bundle.retry_count))
 
             batch = sam3_segment_text_prompts_multi(
                 image_path=bundle.image.path,
@@ -77,27 +85,6 @@ class SAM3Agent(BaseAgent):
                 model_name=self.model_name,
                 params=merged_params,
             )
-
-            # Fallback pass: classes with 0 masks retry their remaining variants
-            variant_idx = 1
-            while True:
-                empty = [
-                    cls for cls in text_classes
-                    if not batch.get(cls) and variant_idx < len(class_variants[cls])
-                ]
-                if not empty:
-                    break
-                retry_prompts = [(cls, class_variants[cls][variant_idx]) for cls in empty]
-                retry_batch = sam3_segment_text_prompts_multi(
-                    image_path=bundle.image.path,
-                    class_prompts=retry_prompts,
-                    model_name=self.model_name,
-                    params=merged_params,
-                )
-                for cls, masks in retry_batch.items():
-                    if masks:
-                        batch[cls] = masks
-                variant_idx += 1
 
             for class_name in text_classes:
                 for raw in batch.get(class_name, []):
@@ -120,8 +107,7 @@ class SAM3Agent(BaseAgent):
             class_hints = hints.get(class_name, {})
             params = {**self.default_params, **class_hints}
             if bundle.retry_count > 0:
-                params.setdefault("retry_mode", True)
-                params.setdefault("retry_seed_bump", bundle.retry_count)
+                params.update(self._retry_params(bundle.retry_count))
             raw_masks = sam3_segment_exemplar_prompt(
                 image_path=bundle.image.path,
                 exemplar_bbox=tuple(class_hints["exemplar_bbox"]),

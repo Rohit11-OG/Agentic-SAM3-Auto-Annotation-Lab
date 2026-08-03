@@ -176,8 +176,10 @@ def segment_text_prompts_multi(
 ) -> Dict[str, List[_Detection]]:
     """Run several text prompts on one image inside a single SAM3 session.
 
-    Saves the cost of re-encoding the image per class. Returns a dict
-    class_id -> list of detections.
+    Saves the cost of re-encoding the image per class. A prompt may hold
+    "|"-separated variants ("car|vehicle|automobile"); they are tried in order
+    inside the same session until one yields detections, so falling back costs
+    no extra image encoding. Returns a dict class_id -> list of detections.
     """
     repo_id = params.get("hf_repo_id") or model_name or "facebook/sam3"
     model, processor, device, dtype = _load_model(repo_id, params)
@@ -212,34 +214,42 @@ def segment_text_prompts_multi(
     )
 
     results: Dict[str, List[_Detection]] = {}
-    with torch.no_grad():
-        for class_id, prompt_text in class_prompts:
-            try:
-                session.reset_tracking_data()
-            except Exception:  # noqa: BLE001
-                pass
-            processor.add_text_prompt(session, text=str(prompt_text))
-            class_dets: List[_Detection] = []
-            for out in model.propagate_in_video_iterator(session):
-                obj_ids = list(getattr(out, "object_ids", []))
-                suppressed = set(getattr(out, "suppressed_obj_ids", []) or [])
-                removed = set(getattr(out, "removed_obj_ids", []) or [])
-                obj_to_mask = getattr(out, "obj_id_to_mask", {}) or {}
-                obj_to_score = getattr(out, "obj_id_to_score", {}) or {}
-                for oid in obj_ids:
-                    if oid in suppressed or oid in removed:
-                        continue
-                    score = float(obj_to_score.get(oid, 0.5))
-                    if score < threshold:
-                        continue
-                    mask = obj_to_mask.get(oid)
-                    if mask is None:
-                        continue
-                    det = _mask_to_detection(mask, score, target_size=image_size)
-                    if det is not None:
-                        class_dets.append(det)
-                break  # single-frame only
-            results[class_id] = class_dets
+    with _INFERENCE_LOCK:
+        with torch.no_grad():
+            for class_id, prompt_text in class_prompts:
+                variants = [v.strip() for v in str(prompt_text).split("|") if v.strip()]
+                if not variants:
+                    variants = [str(prompt_text)]
+                class_dets: List[_Detection] = []
+                for variant in variants:
+                    try:
+                        session.reset_tracking_data()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    processor.add_text_prompt(session, text=variant)
+                    class_dets = []
+                    for out in model.propagate_in_video_iterator(session):
+                        obj_ids = list(getattr(out, "object_ids", []))
+                        suppressed = set(getattr(out, "suppressed_obj_ids", []) or [])
+                        removed = set(getattr(out, "removed_obj_ids", []) or [])
+                        obj_to_mask = getattr(out, "obj_id_to_mask", {}) or {}
+                        obj_to_score = getattr(out, "obj_id_to_score", {}) or {}
+                        for oid in obj_ids:
+                            if oid in suppressed or oid in removed:
+                                continue
+                            score = float(obj_to_score.get(oid, 0.5))
+                            if score < threshold:
+                                continue
+                            mask = obj_to_mask.get(oid)
+                            if mask is None:
+                                continue
+                            det = _mask_to_detection(mask, score, target_size=image_size)
+                            if det is not None:
+                                class_dets.append(det)
+                        break  # single-frame only
+                    if class_dets:
+                        break  # this variant matched; skip remaining fallbacks
+                results[class_id] = class_dets
     return results
 
 
