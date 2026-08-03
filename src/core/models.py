@@ -35,6 +35,7 @@ class ProjectConfig(BaseModel):
     qa_iou_threshold: float = 0.7
     qa_confidence_threshold: float = 0.3
     enable_captioning: bool = False
+    require_all_classes: bool = False
     llm_model_name: str = "mock-llm"
     human_review_policy: HumanReviewPolicy = Field(default_factory=HumanReviewPolicy)
     sam3_params: Dict[str, Any] = Field(default_factory=dict)

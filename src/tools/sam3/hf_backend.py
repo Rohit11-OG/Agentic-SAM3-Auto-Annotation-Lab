@@ -566,8 +566,11 @@ def segment_box_prompt(
         if hasattr(v, "dtype") and v.dtype == torch.float32:
             inputs[k] = v.to(dtype)
 
-    with torch.no_grad():
-        outputs = model(**inputs)
+    # Serialised with the other backends: the Labeler runs box prompts from its
+    # own worker thread, which can overlap a pipeline run on the same GPU.
+    with _INFERENCE_LOCK:
+        with torch.no_grad():
+            outputs = model(**inputs)
 
     pred_masks = getattr(outputs, "pred_masks", None)
     if pred_masks is None:
