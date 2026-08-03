@@ -13,7 +13,7 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from src.core.config_loader import load_project_config
 from src.core.logging_utils import setup_logging
@@ -1426,7 +1426,7 @@ class AnnotatorGUI:
                 cls = int(parts[0])
             except ValueError:
                 continue
-            color = palette_rgb[idx % len(palette_rgb)]
+            color = palette_rgb[cls % len(palette_rgb)]  # color by class, not line order
             cls_name = self._classes[cls] if 0 <= cls < len(self._classes) else f"cls{cls}"
             if len(parts) == 5:
                 try:
@@ -2111,10 +2111,19 @@ class AnnotatorGUI:
             messagebox.showwarning("No dataset folder", "Set the dataset folder in Setup tab first.")
             return
 
+        # refs: list of (img_path, [((x1,y1,x2,y2), class_name), ...]) — class label kept per box
         refs = []
         ref_stems_seen = set()
 
-        # 1. LabelMe JSONs saved by the Labeler (points already in pixels)
+        # Existing classes.txt (from a prior pipeline run) maps YOLO indices -> names
+        disk_class_names: List[str] = []
+        if out_dir and (out_dir / "classes.txt").exists():
+            disk_class_names = [
+                c.strip() for c in (out_dir / "classes.txt").read_text(encoding="utf-8").splitlines() if c.strip()
+            ]
+        fallback_class = (self._fs_class_var.get().strip() or "object")
+
+        # 1. LabelMe JSONs saved by the Labeler (points already in pixels, label per shape)
         for jf in sorted(dataset_dir.rglob("*.json")):
             try:
                 data = json.loads(jf.read_text(encoding="utf-8"))
@@ -2129,16 +2138,17 @@ class AnnotatorGUI:
                     break
             if img_path is None or not shapes:
                 continue
-            bboxes = []
+            boxes = []
             for shp in shapes:
                 pts = shp.get("points") or []
                 if len(pts) < 2:
                     continue
                 xs = [float(pt[0]) for pt in pts]
                 ys = [float(pt[1]) for pt in pts]
-                bboxes.append((int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))))
-            if bboxes:
-                refs.append((img_path, bboxes))
+                label = str(shp.get("label") or fallback_class).strip() or fallback_class
+                boxes.append(((int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))), label))
+            if boxes:
+                refs.append((img_path, boxes))
                 ref_stems_seen.add(img_path.stem)
 
         # 2. Pipeline YOLO labels
@@ -2152,6 +2162,11 @@ class AnnotatorGUI:
         if labels_dir is None and not refs:
             messagebox.showwarning("No labels", "No annotations found.\nAnnotate images in Labeler (Save writes .json next to image)\nor run the pipeline first.")
             return
+
+        def _class_for_index(idx: int) -> str:
+            if 0 <= idx < len(disk_class_names):
+                return disk_class_names[idx]
+            return fallback_class if idx == 0 else f"class_{idx}"
 
         for lf in sorted(labels_dir.glob("*.txt")) if labels_dir else []:
             if lf.name == "classes.txt":
@@ -2179,12 +2194,13 @@ class AnnotatorGUI:
                     W, H = im.size
             except Exception:
                 continue
-            bboxes = []
+            boxes = []
             for line in lines:
                 parts = line.split()
                 if len(parts) < 5:
                     continue
                 try:
+                    cls_idx = int(float(parts[0]))
                     if len(parts) >= 7 and len(parts) % 2 == 1:
                         # Polygon format: class x1 y1 x2 y2 ...
                         xs = [float(parts[i]) for i in range(1, len(parts), 2)]
@@ -2200,11 +2216,12 @@ class AnnotatorGUI:
                         y1 = int((cy - bh / 2) * H)
                         x2 = int((cx + bw / 2) * W)
                         y2 = int((cy + bh / 2) * H)
-                    bboxes.append((max(0, x1), max(0, y1), min(W, x2), min(H, y2)))
+                    box = (max(0, x1), max(0, y1), min(W, x2), min(H, y2))
+                    boxes.append((box, _class_for_index(cls_idx)))
                 except Exception:
                     continue
-            if bboxes:
-                refs.append((img_path, bboxes))
+            if boxes:
+                refs.append((img_path, boxes))
 
         if not refs:
             messagebox.showwarning("No references found", "No annotations found.\nAnnotate images in Labeler (Save writes .json next to image)\nor run the pipeline first.")
@@ -2212,8 +2229,11 @@ class AnnotatorGUI:
 
         self._fs_refs = refs
         self._fs_ref_listbox.delete(0, "end")
-        for p, bboxes in refs:
-            self._fs_ref_listbox.insert("end", f"[{len(bboxes)} box{'es' if len(bboxes)!=1 else ''}]  {p.name}")
+        for p, boxes in refs:
+            classes_here = sorted({lbl for _, lbl in boxes})
+            self._fs_ref_listbox.insert(
+                "end", f"[{len(boxes)} box{'es' if len(boxes)!=1 else ''}: {', '.join(classes_here)}]  {p.name}"
+            )
         self._fs_ref_count_var.set(f"{len(refs)} reference(s) loaded")
 
         # Scan targets: images NOT in refs
@@ -2291,100 +2311,124 @@ class AnnotatorGUI:
             labels_dir = out_dir / labels_folder_name
             labels_dir.mkdir(parents=True, exist_ok=True)
 
-            # Process in batches of 8 to avoid OOM
+            # Ordered class list: keep any existing classes.txt order, append new labels.
+            class_list: List[str] = []
+            cf = out_dir / "classes.txt"
+            if cf.exists():
+                class_list = [c.strip() for c in cf.read_text(encoding="utf-8").splitlines() if c.strip()]
+            for _, boxes in refs:
+                for _, lbl in boxes:
+                    if lbl not in class_list:
+                        class_list.append(lbl)
+            classes_used = [c for c in class_list if any(lbl == c for _, bx in refs for _, lbl in bx)]
+
+            # Accumulate per-target: YOLO lines (with correct class index) and (class, mask) for bundles
+            per_target_lines: Dict[str, List[str]] = {str(p): [] for p in targets}
+            per_target_masks: Dict[str, List[Tuple[str, Any]]] = {str(p): [] for p in targets}
+            img_sizes: Dict[str, Tuple[int, int]] = {}
+
+            def _img_size(p):
+                k = str(p)
+                if k not in img_sizes:
+                    try:
+                        from PIL import Image as _PI
+                        with _PI.open(p) as im:
+                            img_sizes[k] = im.size
+                    except Exception:  # noqa: BLE001
+                        img_sizes[k] = (1024, 1024)
+                return img_sizes[k]
+
             BATCH = 8
-            all_results = {}
-            for batch_start in range(0, total, BATCH):
-                if self._fs_cancel_var.get():
+            n_cls = max(1, len(classes_used))
+            aborted = False
+            for ci, cls in enumerate(classes_used):
+                if aborted or self._fs_cancel_var.get():
                     break
-                batch = targets[batch_start: batch_start + BATCH]
-                self.root.after(0, lambda s=batch_start: self._fs_status_var.set(
-                    f"Processing {s+1}–{min(s+BATCH, total)}/{total}…"
-                ))
-                try:
-                    batch_res = sam3_segment_fewshot(
-                        ref_data=refs,
-                        target_paths=batch,
-                        class_name=class_name,
-                        model_name="facebook/sam3",
-                        params=params,
-                    )
-                    all_results.update(batch_res)
-                except Exception as exc:
-                    self.root.after(0, lambda e=str(exc): messagebox.showerror("Few-shot error", e))
-                    break
-                pct = min(100.0, (batch_start + len(batch)) / total * 100)
-                self.root.after(0, lambda p=pct: self._fs_progress_var.set(p))
+                cls_idx = class_list.index(cls)
+                # References that contain at least one box of this class
+                cls_refs = [
+                    (path, [bx for bx, lbl in boxes if lbl == cls])
+                    for path, boxes in refs
+                ]
+                cls_refs = [(p, b) for p, b in cls_refs if b]
+                if not cls_refs:
+                    continue
+
+                for batch_start in range(0, total, BATCH):
+                    if self._fs_cancel_var.get():
+                        aborted = True
+                        break
+                    batch = targets[batch_start: batch_start + BATCH]
+                    self.root.after(0, lambda c=cls, s=batch_start: self._fs_status_var.set(
+                        f"Class '{c}': {s+1}–{min(s+BATCH, total)}/{total}…"
+                    ))
+                    try:
+                        batch_res = sam3_segment_fewshot(
+                            ref_data=cls_refs,
+                            target_paths=batch,
+                            class_name=cls,
+                            model_name="facebook/sam3",
+                            params=params,
+                        )
+                    except Exception as exc:
+                        self.root.after(0, lambda e=str(exc): messagebox.showerror("Few-shot error", e))
+                        aborted = True
+                        break
+                    for p in batch:
+                        W, H = _img_size(p)
+                        for m in batch_res.get(str(p), []):
+                            if m.polygon and len(m.polygon) >= 3:
+                                coords = " ".join(f"{x/W:.6f} {y/H:.6f}" for x, y in m.polygon)
+                                per_target_lines[str(p)].append(f"{cls_idx} {coords}")
+                            elif m.bbox:
+                                x1, y1, bw, bh = m.bbox
+                                cx = (x1 + bw / 2) / W
+                                cy = (y1 + bh / 2) / H
+                                per_target_lines[str(p)].append(
+                                    f"{cls_idx} {cx:.6f} {cy:.6f} {bw/W:.6f} {bh/H:.6f}"
+                                )
+                            per_target_masks[str(p)].append((cls, m))
+                    done_frac = (ci * total + min(batch_start + len(batch), total)) / (n_cls * total)
+                    self.root.after(0, lambda p=done_frac * 100: self._fs_progress_var.set(min(100.0, p)))
 
             # Write YOLO label files
             written = 0
             for p in targets:
-                masks = all_results.get(str(p), [])
-                if not masks:
-                    continue
-                label_path = labels_dir / f"{p.stem}.txt"
-                lines = []
-                try:
-                    from PIL import Image as _PI
-                    with _PI.open(p) as im:
-                        W, H = im.size
-                except Exception:
-                    continue
-                for m in masks:
-                    if m.polygon and len(m.polygon) >= 3:
-                        coords = " ".join(f"{x/W:.6f} {y/H:.6f}" for x, y in m.polygon)
-                        lines.append(f"0 {coords}")
-                    elif m.bbox:
-                        x1, y1, bw, bh = m.bbox
-                        cx = (x1 + bw / 2) / W
-                        cy = (y1 + bh / 2) / H
-                        lines.append(f"0 {cx:.6f} {cy:.6f} {bw/W:.6f} {bh/H:.6f}")
+                lines = per_target_lines[str(p)]
                 if lines:
-                    label_path.write_text("\n".join(lines), encoding="utf-8")
+                    (labels_dir / f"{p.stem}.txt").write_text("\n".join(lines), encoding="utf-8")
                     written += 1
 
-            # Ensure classes.txt exists in the output folder
-            classes_file = out_dir / "classes.txt"
-            if not classes_file.exists():
-                classes_file.write_text(class_name, encoding="utf-8")
+            # classes.txt: rewrite with the full ordered class list (index N == line N)
+            if class_list:
+                cf.write_text("\n".join(class_list), encoding="utf-8")
 
-            # Update in-memory bundles so results list updates immediately
-            if self.last_bundles:
-                for p in targets:
-                    masks_raw = all_results.get(str(p), [])
-                    if not masks_raw:
-                        continue
-                    # Find or create bundle
-                    bundle = next((b for b in self.last_bundles if b.image.path == p), None)
-                    if not bundle:
-                        try:
-                            from PIL import Image as _PI
-                            with _PI.open(p) as im:
-                                w_img, h_img = im.size
-                        except Exception:
-                            w_img, h_img = 1024, 1024
-                        im_rec = ImageRecord(id=f"img_{p.stem}", path=p, width=w_img, height=h_img)
-                        bundle = AnnotationBundle(image=im_rec, status="ACCEPTED")
-                        self.last_bundles.append(bundle)
-                    
-                    bundle.status = "ACCEPTED"
-                    self._bundle_status[p.stem] = "ACCEPTED"
-                    
-                    # Convert raw masks to MaskRecords
-                    converted_masks = []
-                    for m in masks_raw:
-                        converted_masks.append(MaskRecord(
-                            mask_id=new_mask_id(),
-                            image_id=bundle.image.id,
-                            class_id=class_name,
-                            polygon=m.polygon,
-                            bbox=m.bbox,
-                            area=m.area,
-                            confidence=m.confidence,
-                            source="sam3",
-                            version=1
-                        ))
-                    bundle.masks = converted_masks
+            # Update in-memory bundles so the Results list shows few-shot output immediately
+            if self.last_bundles is None:
+                self.last_bundles = []
+            for p in targets:
+                masks_raw = per_target_masks[str(p)]
+                if not masks_raw:
+                    continue
+                bundle = next((b for b in self.last_bundles if b.image.path == p), None)
+                if not bundle:
+                    w_img, h_img = _img_size(p)
+                    im_rec = ImageRecord(id=f"img_{p.stem}", path=p, width=w_img, height=h_img)
+                    bundle = AnnotationBundle(image=im_rec, status="ACCEPTED")
+                    self.last_bundles.append(bundle)
+                bundle.status = "ACCEPTED"
+                self._bundle_status[p.stem] = "ACCEPTED"
+                bundle.masks = [
+                    MaskRecord(
+                        mask_id=new_mask_id(), image_id=bundle.image.id, class_id=cls,
+                        polygon=m.polygon, bbox=m.bbox, area=m.area, confidence=m.confidence,
+                        source="sam3", version=1,
+                    )
+                    for cls, m in masks_raw
+                ]
+
+            # Point the Results tab at this output so it can load labels from disk
+            self.last_output_path = out_dir
 
             cancelled = self._fs_cancel_var.get()
             def _done():
@@ -2392,10 +2436,15 @@ class AnnotatorGUI:
                 self._fs_cancel_btn.configure(state="disabled")
                 self._fs_progress_var.set(100.0 if not cancelled else self._fs_progress_var.get())
                 msg = "Cancelled. " if cancelled else ""
-                self._fs_status_var.set(f"{msg}Done. {written}/{total} images annotated → {labels_dir}")
+                cls_note = f" [{', '.join(classes_used)}]" if classes_used else ""
+                self._fs_status_var.set(f"{msg}Done. {written}/{total} images annotated{cls_note} → {labels_dir}")
                 if written > 0:
-                    self._load_labels_list()  # Refresh results tab lists!
-                    messagebox.showinfo("Few-Shot Complete", f"Annotated {written} of {total} target images.\nLabels saved to:\n{labels_dir}")
+                    self._load_labels_list()  # Refresh Results tab list from disk
+                    messagebox.showinfo(
+                        "Few-Shot Complete",
+                        f"Annotated {written} of {total} target images across {len(classes_used)} class(es).\n"
+                        f"Labels saved to:\n{labels_dir}\nSee them in the Results tab.",
+                    )
             self.root.after(0, _done)
 
         _threading.Thread(target=_worker, daemon=True).start()

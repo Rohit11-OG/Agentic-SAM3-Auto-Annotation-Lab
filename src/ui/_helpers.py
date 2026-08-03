@@ -25,10 +25,16 @@ def project_root() -> Path:
 
 def resolve_path(p: Path) -> Path:
     p = Path(p)
-    if p.is_absolute() or p.exists():
-        return p
+    if p.is_absolute():
+        return p.resolve()
+    if p.exists():
+        return p.resolve()
+
     candidate = project_root() / p
-    return candidate if candidate.exists() else p
+    if candidate.exists():
+        return candidate.resolve()
+
+    return p.resolve()
 
 
 def color_for(class_name: str) -> str:
