@@ -1153,7 +1153,7 @@ class AnnotatorGUI:
 
             if not config.dataset_path.exists():
                 raise FileNotFoundError(f"Images folder not found: {config.dataset_path}")
-            preview_paths = list_image_paths(config.dataset_path)
+            preview_paths = list_image_paths(config.dataset_path, exclude=config.output_path)
             self.log_queue.put(("INFO", "SYSTEM", f"Found {len(preview_paths)} image(s) in {config.dataset_path}"))
             if not preview_paths:
                 raise RuntimeError("No images found. Supported: .jpg .jpeg .png .bmp .webp")
@@ -1604,7 +1604,9 @@ class AnnotatorGUI:
         if not logs_file.exists():
             raise FileNotFoundError(f"No conversation_logs.json found in output folder:\n{out_dir}")
 
-        images = discover_images(dataset_dir)
+        # Must match the scan run_orchestrator used: image ids are positional, so
+        # letting exported copies back in would shift every id against the logs.
+        images = discover_images(dataset_dir, exclude=out_dir)
         img_map = {im.id: im for im in images}
         logs_data = json.loads(logs_file.read_text(encoding="utf-8"))
 

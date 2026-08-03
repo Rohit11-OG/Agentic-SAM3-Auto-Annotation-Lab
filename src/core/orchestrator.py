@@ -21,6 +21,10 @@ LOGGER = logging.getLogger(__name__)
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
+# Subfolders the exporters create under output_path. They hold a copy of every
+# exported image, so a recursive dataset scan must never treat them as input.
+EXPORT_SUBDIRS = {"yolo_labels", "yolo_seg_labels", "labelme_json", "logs"}
+
 try:
     from PIL import Image as _PILImage  # type: ignore
 
@@ -72,17 +76,56 @@ def _read_image_size(image_path: Path) -> Tuple[int, int]:
     return 1024, 1024
 
 
-def list_image_paths(dataset_path: Path, recursive: bool = True) -> List[Path]:
+def list_image_paths(
+    dataset_path: Path,
+    recursive: bool = True,
+    exclude: Optional[Path] = None,
+) -> List[Path]:
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset path does not exist: {dataset_path}")
     if not dataset_path.is_dir():
         raise NotADirectoryError(f"Dataset path is not a directory: {dataset_path}")
     iterator = dataset_path.rglob("*") if recursive else dataset_path.iterdir()
-    return sorted(p for p in iterator if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES)
+    paths = sorted(p for p in iterator if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES)
+
+    # The exporters copy each image next to its label file. When the output
+    # folder sits inside the dataset folder, a recursive scan would re-annotate
+    # those copies on every run — multiplying the work and, because image ids
+    # are positional, shifting every id against previously written logs.
+    root = dataset_path.resolve()
+    excl = None
+    if exclude is not None:
+        try:
+            resolved = exclude.resolve()
+            # An output folder equal to the dataset root would exclude everything;
+            # there the export subfolder names below are what actually filters.
+            if resolved != root:
+                excl = resolved
+        except (OSError, ValueError):
+            excl = None
+
+    def _is_input(p: Path) -> bool:
+        try:
+            rp = p.resolve()
+        except (OSError, ValueError):
+            return True
+        if excl is not None and rp.is_relative_to(excl):
+            return False
+        try:
+            parts = rp.relative_to(root).parts[:-1]
+        except ValueError:
+            return True
+        return not any(part in EXPORT_SUBDIRS for part in parts)
+
+    return [p for p in paths if _is_input(p)]
 
 
-def discover_images(dataset_path: Path, recursive: bool = True) -> List[ImageRecord]:
-    paths = list_image_paths(dataset_path, recursive=recursive)
+def discover_images(
+    dataset_path: Path,
+    recursive: bool = True,
+    exclude: Optional[Path] = None,
+) -> List[ImageRecord]:
+    paths = list_image_paths(dataset_path, recursive=recursive, exclude=exclude)
     if not paths:
         return []
 
@@ -298,7 +341,7 @@ def run_orchestrator(
     cancel_event: Optional[threading.Event] = None,
 ) -> List[AnnotationBundle]:
     config.output_path.mkdir(parents=True, exist_ok=True)
-    images = discover_images(config.dataset_path)
+    images = discover_images(config.dataset_path, exclude=config.output_path)
     LOGGER.info("Discovered %d images in dataset (recursive scan).", len(images))
     if not images:
         LOGGER.warning(
