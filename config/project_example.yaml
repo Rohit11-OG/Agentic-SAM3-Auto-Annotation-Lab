@@ -30,6 +30,9 @@ qa:
   iou_threshold: 0.7
   confidence_threshold: 0.3
   enable_captioning: false
+  # true = flag any image missing a class from label_schema. Only useful when
+  # every image really is expected to contain every class.
+  require_all_classes: false
 
 llm:
   model_name: "mock-llm"
