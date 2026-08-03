@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from src.agents.base_agent import BaseAgent
-from src.core.models import AnnotationBundle, ConversationMessage
+from src.core.models import AnnotationBundle, ConversationMessage, QAResult
 
 
 class CoordinatorAgent(BaseAgent):
@@ -49,8 +49,19 @@ class CoordinatorAgent(BaseAgent):
             actions=[{"type": "REQUEST_QA", "image_id": bundle.image.id}],
         )
 
+    def _coerce_qa_result(self, bundle: AnnotationBundle) -> QAResult | None:
+        if isinstance(bundle.qa_result, QAResult):
+            return bundle.qa_result
+        if isinstance(bundle.qa_result, dict):
+            try:
+                return QAResult.model_validate(bundle.qa_result)
+            except Exception:
+                return None
+        return None
+
     def _after_qa(self, bundle: AnnotationBundle) -> ConversationMessage:
-        decision = bundle.qa_result.decision if bundle.qa_result else "RETRY_WITH_HINTS"
+        qa_result = self._coerce_qa_result(bundle)
+        decision = qa_result.decision if qa_result else "RETRY_WITH_HINTS"
 
         if decision == "ACCEPT":
             return ConversationMessage(
@@ -86,7 +97,7 @@ class CoordinatorAgent(BaseAgent):
                     "image_id": bundle.image.id,
                     "classes": self.label_schema,
                     "retry_count": bundle.retry_count + 1,
-                    "hints": (bundle.qa_result.hints if bundle.qa_result else {}),
+                    "hints": (qa_result.hints if qa_result else {}),
                     "per_class_prompt": self.per_class_prompt,
                 },
             ],
@@ -103,6 +114,7 @@ class CoordinatorAgent(BaseAgent):
             if "QA_DECISION" in action_types:
                 return self._after_qa(bundle)
             if bundle.status == "QA_RETRY":
+                qa_result = self._coerce_qa_result(bundle)
                 return ConversationMessage(
                     image_id=bundle.image.id,
                     sender=self.name,
@@ -114,7 +126,7 @@ class CoordinatorAgent(BaseAgent):
                             "image_id": bundle.image.id,
                             "classes": self.label_schema,
                             "retry_count": bundle.retry_count + 1,
-                            "hints": (bundle.qa_result.hints if bundle.qa_result else {}),
+                            "hints": (qa_result.hints if qa_result else {}),
                             "per_class_prompt": self.per_class_prompt,
                         }
                     ],

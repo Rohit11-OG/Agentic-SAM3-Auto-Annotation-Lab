@@ -8,6 +8,20 @@ import yaml
 from src.core.models import HumanReviewPolicy, ProjectConfig
 
 
+def _resolve_path(path_value: Any, config_path: Path, default: str) -> Path:
+    if path_value is None:
+        return (config_path.parent / default).resolve()
+
+    path = Path(str(path_value))
+    if path.is_absolute():
+        return path
+
+    if path.exists():
+        return path.resolve()
+
+    return (config_path.parent / path).resolve()
+
+
 def _require_mapping(data: Dict[str, Any], key: str) -> Dict[str, Any]:
     value = data.get(key, {})
     if not isinstance(value, dict):
@@ -30,8 +44,8 @@ def load_project_config(config_path: Path) -> ProjectConfig:
     llm_cfg = _require_mapping(raw, "llm")
     hr_cfg = _require_mapping(raw, "human_review")
 
-    dataset_path = Path(raw.get("dataset_path", "./data/images"))
-    output_path = Path(raw.get("output_path", "./data/annotations_final"))
+    dataset_path = _resolve_path(raw.get("dataset_path", "./data/images"), config_path, "./data/images")
+    output_path = _resolve_path(raw.get("output_path", "./data/annotations_final"), config_path, "./data/annotations_final")
 
     label_schema = list(raw.get("label_schema", []))
     if not label_schema:

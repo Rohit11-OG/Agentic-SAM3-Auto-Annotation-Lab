@@ -52,8 +52,16 @@ class CurationAgent(BaseAgent):
             return 0.0, issues, hints
 
         class_counts = Counter(mask.class_id for mask in bundle.masks)
-        for class_name in self.label_schema:
-            if class_counts.get(class_name, 0) == 0:
+        if bundle.masks:
+            for class_name in self.label_schema:
+                if class_name in class_counts:
+                    continue
+                if class_counts.get(class_name, 0) == 0 and self.enable_captioning:
+                    issues.append(f"No masks for class '{class_name}'.")
+                    hints.setdefault(class_name, {})["min_instances"] = 1
+                    score -= 0.1
+        else:
+            for class_name in self.label_schema:
                 issues.append(f"No masks for class '{class_name}'.")
                 hints.setdefault(class_name, {})["min_instances"] = 1
                 score -= 0.1
