@@ -69,6 +69,7 @@ class SAM3Agent(BaseAgent):
                 text_classes.append(class_name)
 
         generated_masks: List[MaskRecord] = []
+        candidate_counts: Dict[str, int] = {}
 
         # Multi-class text prompts -> single-session call (saves image encoding).
         # "|"-separated variants ("defect|paint mark|stain") are tried inside that
@@ -84,6 +85,7 @@ class SAM3Agent(BaseAgent):
                 class_prompts=class_prompts,
                 model_name=self.model_name,
                 params=merged_params,
+                candidate_counts=candidate_counts,
             )
 
             for class_name in text_classes:
@@ -129,6 +131,11 @@ class SAM3Agent(BaseAgent):
                     )
                 )
 
+        # The model proposed nothing at any score for every class it was asked
+        # about, so re-running with a looser threshold has nothing to find. Say
+        # so, and QA can escalate instead of paying for an identical pass.
+        no_candidates = bool(candidate_counts) and not any(candidate_counts.values())
+
         detail = ", ".join(f"{c}: {sum(1 for m in generated_masks if m.class_id == c)}" for c in classes)
         return ConversationMessage(
             image_id=bundle.image.id,
@@ -140,6 +147,7 @@ class SAM3Agent(BaseAgent):
                     "type": "ANNOTATION_RESULT",
                     "image_id": bundle.image.id,
                     "masks": [mask.model_dump() for mask in generated_masks],
+                    "no_candidates": no_candidates,
                 }
             ],
         )

@@ -108,6 +108,15 @@ class CurationAgent(BaseAgent):
             self._caption_cache[bundle.image.id] = caption
         return caption
 
+    @staticmethod
+    def _model_found_nothing(bundle: AnnotationBundle) -> bool:
+        """True when the latest annotation reported zero pre-threshold candidates."""
+        for message in reversed(bundle.history):
+            for action in message.actions:
+                if action.get("type") == "ANNOTATION_RESULT":
+                    return bool(action.get("no_candidates"))
+        return False
+
     def respond(self, bundle: AnnotationBundle) -> ConversationMessage:
         score, issues, hints = self._quality_checks(bundle)
 
@@ -124,6 +133,12 @@ class CurationAgent(BaseAgent):
         if score >= 0.75 and not issues:
             decision = "ACCEPT"
         elif bundle.retry_count >= 1 and score < 0.45:
+            decision = "HUMAN_REVIEW"
+        elif self._model_found_nothing(bundle):
+            # Retrying only loosens the score threshold. When the model proposed
+            # no candidates at all, a second pass is an identical, wasted
+            # inference — the class simply is not in this image.
+            issues.append("Model proposed no candidates; retry cannot help.")
             decision = "HUMAN_REVIEW"
         else:
             decision = "RETRY_WITH_HINTS"
