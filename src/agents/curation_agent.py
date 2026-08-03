@@ -19,8 +19,10 @@ class CurationAgent(BaseAgent):
         label_schema: Optional[List[str]] = None,
         enable_captioning: bool = False,
         caption_fn: Optional[Callable[..., str]] = None,
+        require_all_classes: bool = False,
     ) -> None:
         super().__init__(name="CurationAgent")
+        self.require_all_classes = require_all_classes
         self.min_mask_area = min_mask_area
         self.max_mask_area = max_mask_area
         self.iou_threshold = iou_threshold
@@ -51,20 +53,17 @@ class CurationAgent(BaseAgent):
                 hints[class_name] = {"min_instances": 1}
             return 0.0, issues, hints
 
+        # A class with no masks is only a defect when every image is expected to
+        # contain every class, which is rare — most datasets have images where a
+        # class simply isn't present. Off by default; the caption cross-check
+        # below still catches classes the image is described as containing.
         class_counts = Counter(mask.class_id for mask in bundle.masks)
-        if bundle.masks:
+        if self.require_all_classes:
             for class_name in self.label_schema:
-                if class_name in class_counts:
-                    continue
-                if class_counts.get(class_name, 0) == 0 and self.enable_captioning:
+                if class_counts.get(class_name, 0) == 0:
                     issues.append(f"No masks for class '{class_name}'.")
                     hints.setdefault(class_name, {})["min_instances"] = 1
                     score -= 0.1
-        else:
-            for class_name in self.label_schema:
-                issues.append(f"No masks for class '{class_name}'.")
-                hints.setdefault(class_name, {})["min_instances"] = 1
-                score -= 0.1
 
         for mask in bundle.masks:
             rel_area = mask.area / image_area

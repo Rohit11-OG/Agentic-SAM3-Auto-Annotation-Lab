@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from src.agents.base_agent import BaseAgent
 from src.core.models import AnnotationBundle, ConversationMessage, QAResult
