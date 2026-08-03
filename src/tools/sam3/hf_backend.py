@@ -198,6 +198,7 @@ def segment_text_prompts_multi(
     class_prompts: List[Tuple[str, str]],
     model_name: str,
     params: Dict[str, Any],
+    candidate_counts: Optional[Dict[str, int]] = None,
 ) -> Dict[str, List[_Detection]]:
     """Run several text prompts on one image inside a single SAM3 session.
 
@@ -205,6 +206,11 @@ def segment_text_prompts_multi(
     "|"-separated variants ("car|vehicle|automobile"); they are tried in order
     inside the same session until one yields detections, so falling back costs
     no extra image encoding. Returns a dict class_id -> list of detections.
+
+    ``candidate_counts``, if given, is filled with the number of raw detections
+    the model proposed per class *before* the score threshold was applied. Zero
+    there means the model saw nothing at any score, so re-running the class with
+    a lower threshold cannot produce a different answer.
     """
     repo_id = params.get("hf_repo_id") or model_name or "facebook/sam3"
     model, processor, device, dtype = _load_model(repo_id, params)
@@ -246,6 +252,7 @@ def segment_text_prompts_multi(
                 if not variants:
                     variants = [str(prompt_text)]
                 class_dets: List[_Detection] = []
+                candidates = 0
                 for variant in variants:
                     try:
                         session.reset_tracking_data()
@@ -262,6 +269,7 @@ def segment_text_prompts_multi(
                         for oid in obj_ids:
                             if oid in suppressed or oid in removed:
                                 continue
+                            candidates += 1
                             score = float(obj_to_score.get(oid, 0.5))
                             if score < threshold:
                                 continue
@@ -275,6 +283,8 @@ def segment_text_prompts_multi(
                     if class_dets:
                         break  # this variant matched; skip remaining fallbacks
                 results[class_id] = class_dets
+                if candidate_counts is not None:
+                    candidate_counts[class_id] = candidates
     return results
 
 

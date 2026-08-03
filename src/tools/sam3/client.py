@@ -8,7 +8,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from random import Random
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib import request as urlrequest
 
 
@@ -239,18 +239,23 @@ def sam3_segment_text_prompts_multi(
     class_prompts: List[Tuple[str, str]],
     model_name: str,
     params: Dict[str, Any],
+    candidate_counts: Optional[Dict[str, int]] = None,
 ) -> Dict[str, List[RawMask]]:
     """Multi-class text segmentation in a single SAM3 session (hf_local) when possible.
 
     Falls back to per-class loop on other backends. ``class_prompts`` is a list
-    of ``(class_id, prompt_text)`` tuples.
+    of ``(class_id, prompt_text)`` tuples. ``candidate_counts`` is filled with
+    the pre-threshold detection count per class where the backend reports it.
     """
     backend = str(params.get("backend", "mock")).lower()
     if backend == "hf_local":
         try:
             from src.tools.sam3.hf_backend import segment_text_prompts_multi as _hf_multi
 
-            grouped = _hf_multi(image_path, class_prompts, model_name, params)
+            grouped = _hf_multi(
+                image_path, class_prompts, model_name, params,
+                candidate_counts=candidate_counts,
+            )
             return {
                 cls: [RawMask(polygon=d.polygon, bbox=d.bbox, area=d.area, confidence=d.confidence) for d in dets]
                 for cls, dets in grouped.items()
