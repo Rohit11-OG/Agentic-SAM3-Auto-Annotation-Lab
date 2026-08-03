@@ -211,14 +211,28 @@ def run_bundle_conversation(
                 LOGGER.debug("CurationAgent: %s", qa_msg.content)
                 continue
 
-    if turns >= max_turns and bundle.status not in {"ACCEPTED", "HUMAN_REVIEW"}:
+            # No actionable request and the status did not move: nothing further
+            # will change, so stop instead of spinning out max_turns and filling
+            # the history with no-op messages.
+            if not coordinator_msg.actions:
+                LOGGER.warning(
+                    "%s: coordinator produced no action from status %s; escalating.",
+                    bundle.image.id, bundle.status,
+                )
+                break
+
+    # Any exit without a terminal status must escalate, whether the loop ran out
+    # of turns or stopped early: a bundle left in NEW/ANNOTATED/QA_RETRY is
+    # skipped by the exporters and would disappear from the output silently.
+    if bundle.status not in {"ACCEPTED", "HUMAN_REVIEW"}:
+        reason = "Max turns reached" if turns >= max_turns else "Conversation stalled"
         bundle.status = "HUMAN_REVIEW"
         bundle.history.append(
             ConversationMessage(
                 image_id=bundle.image.id,
                 sender="CoordinatorAgent",
                 role="system",
-                content="Max turns reached; escalating to HUMAN_REVIEW.",
+                content=f"{reason}; escalating to HUMAN_REVIEW.",
                 actions=[{"type": "SET_STATUS", "image_id": bundle.image.id, "status": "HUMAN_REVIEW"}],
             )
         )
@@ -365,6 +379,7 @@ def run_orchestrator(
         label_schema=config.label_schema,
         enable_captioning=config.enable_captioning,
         caption_fn=caption_image if config.enable_captioning else None,
+        require_all_classes=config.require_all_classes,
     )
 
     bundles: List[AnnotationBundle] = [AnnotationBundle(image=image, status="NEW") for image in images]

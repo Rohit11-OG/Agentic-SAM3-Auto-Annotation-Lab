@@ -9,6 +9,13 @@ from src.core.models import HumanReviewPolicy, ProjectConfig
 
 
 def _resolve_path(path_value: Any, config_path: Path, default: str) -> Path:
+    """Resolve a path from the config, relative to the config file itself.
+
+    Config-relative wins over process-relative so that loading the same config
+    from a different working directory keeps pointing at the same folders. A
+    CWD-relative path is honoured only when it exists and the config-relative
+    one does not, which keeps older invocations working.
+    """
     if path_value is None:
         return (config_path.parent / default).resolve()
 
@@ -16,10 +23,12 @@ def _resolve_path(path_value: Any, config_path: Path, default: str) -> Path:
     if path.is_absolute():
         return path
 
+    config_relative = (config_path.parent / path).resolve()
+    if config_relative.exists():
+        return config_relative
     if path.exists():
         return path.resolve()
-
-    return (config_path.parent / path).resolve()
+    return config_relative
 
 
 def _require_mapping(data: Dict[str, Any], key: str) -> Dict[str, Any]:
@@ -63,6 +72,7 @@ def load_project_config(config_path: Path) -> ProjectConfig:
         qa_iou_threshold=float(qa_cfg.get("iou_threshold", 0.7)),
         qa_confidence_threshold=float(qa_cfg.get("confidence_threshold", 0.3)),
         enable_captioning=bool(qa_cfg.get("enable_captioning", False)),
+        require_all_classes=bool(qa_cfg.get("require_all_classes", False)),
         llm_model_name=llm_cfg.get("model_name", "mock-llm"),
         human_review_policy=HumanReviewPolicy(
             enabled=bool(hr_cfg.get("enabled", True)),
