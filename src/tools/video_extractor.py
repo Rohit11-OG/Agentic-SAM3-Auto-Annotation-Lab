@@ -107,8 +107,9 @@ def extract_frames(
             LOGGER.error(result.error)
             return result
 
-        # Clamp to actual frame count
-        actual = min(num_frames, total_frames)
+        # Clamp to actual frame count (and to at least one, so the even-spacing
+        # step below can never divide by zero)
+        actual = max(1, min(num_frames, total_frames))
 
         # Compute evenly-spaced frame indices
         if actual >= total_frames:

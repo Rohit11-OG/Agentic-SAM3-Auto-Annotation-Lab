@@ -29,6 +29,8 @@ _IMAGE_MODEL_CACHE: Dict[str, Tuple[Any, Any, str, Any]] = {}
 _TRACKER_MODEL_LOCK = threading.Lock()
 _TRACKER_MODEL_CACHE: Dict[str, Tuple[Any, Any, str, Any]] = {}
 
+_CUDA_TUNED = False
+
 
 @dataclass
 class _Detection:
@@ -36,6 +38,27 @@ class _Detection:
     bbox: Tuple[int, int, int, int]
     area: float
     confidence: float
+
+
+def _tune_cuda(device: str) -> None:
+    """Enable CUDA autotuning once per process.
+
+    SAM3 resizes every input to a fixed resolution, so convolution shapes do not
+    change between images and the cuDNN autotuner's one-off cost is repaid over
+    the run. TF32 only affects the fp32 ops left over from the fp16 cast.
+    """
+    global _CUDA_TUNED
+    if _CUDA_TUNED or not device.startswith("cuda"):
+        return
+    try:
+        import torch  # type: ignore
+
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        _CUDA_TUNED = True
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _resolve_device(prefer: Optional[str]) -> str:
@@ -72,6 +95,8 @@ def _load_model(repo_id: str, params: Dict[str, Any]) -> Tuple[Any, Any, str, An
         local_dir = params.get("local_dir")
         source = local_dir if local_dir else repo_id
         LOGGER.info("Loading SAM3 from %s (device=%s, dtype=%s)", source, device, dtype)
+
+        _tune_cuda(device)
 
         local_only = bool(local_dir)
         # Suppress HF hub pings when running fully offline from a local snapshot
@@ -215,7 +240,7 @@ def segment_text_prompts_multi(
 
     results: Dict[str, List[_Detection]] = {}
     with _INFERENCE_LOCK:
-        with torch.no_grad():
+        with torch.inference_mode():
             for class_id, prompt_text in class_prompts:
                 variants = [v.strip() for v in str(prompt_text).split("|") if v.strip()]
                 if not variants:
@@ -294,7 +319,7 @@ def segment_text_prompt(
 
     detections: List[_Detection] = []
     with _INFERENCE_LOCK:
-        with torch.no_grad():
+        with torch.inference_mode():
             for out in model.propagate_in_video_iterator(session):
                 obj_ids = list(getattr(out, "object_ids", []))
                 suppressed = set(getattr(out, "suppressed_obj_ids", []) or [])
@@ -460,7 +485,7 @@ def segment_fewshot(
                 input_boxes=[box_list],
             )
 
-            with torch.no_grad():
+            with torch.inference_mode():
                 # Build conditioning memory on the prompted frame, then propagate
                 model(inference_session=session, frame_idx=0)
                 for out in model.propagate_in_video_iterator(session, start_frame_idx=0):
@@ -569,7 +594,7 @@ def segment_box_prompt(
     # Serialised with the other backends: the Labeler runs box prompts from its
     # own worker thread, which can overlap a pipeline run on the same GPU.
     with _INFERENCE_LOCK:
-        with torch.no_grad():
+        with torch.inference_mode():
             outputs = model(**inputs)
 
     pred_masks = getattr(outputs, "pred_masks", None)
