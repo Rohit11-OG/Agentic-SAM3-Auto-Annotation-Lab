@@ -453,6 +453,12 @@ def segment_fewshot(
     """Few-shot annotation via SAM3 tracker: reference boxes seed object masklets,
     the tracker propagates them across the remaining frames.
 
+    A detection on a target frame is kept only when the tracker's own presence
+    head reports the object as actually appearing there (``object_score_logits
+    > 0``) and above ``params["hf_score_threshold"]``; a rendered mask blob
+    alone is not enough, since the decoder can still shape one from stale
+    memory after the object has left the frame or become occluded.
+
     ref_data: list of (image_path, list_of_bboxes_x1y1x2y2)
     target_paths: list of unannotated image paths
     Returns: {str(target_path): [_Detection, ...]}
@@ -467,6 +473,7 @@ def segment_fewshot(
         raise RuntimeError("PIL/torch required") from exc
 
     target_frames = [Image.open(p).convert("RGB") for p in target_paths]
+    threshold = float(params.get("hf_score_threshold", 0.4))
 
     results: Dict[str, List[_Detection]] = {str(p): [] for p in target_paths}
 
@@ -477,7 +484,21 @@ def segment_fewshot(
             if not bboxes:
                 continue
             ref_frame = Image.open(ref_path).convert("RGB")
-            all_frames = [ref_frame] + target_frames
+
+            # The session stacks every frame into one raw array before any
+            # model-side resizing happens, so all frames must share one pixel
+            # size or the stack itself throws. References and targets routinely
+            # come from different sources (a hand-picked example vs. a scraped
+            # dataset) and rarely match. Masks are mapped back to each target's
+            # true size via target_size=target_img.size below regardless, so
+            # resizing the session's copy here does not affect output coordinates.
+            session_targets = target_frames
+            if any(tf.size != ref_frame.size for tf in target_frames):
+                session_targets = [
+                    tf if tf.size == ref_frame.size else tf.resize(ref_frame.size, Image.BILINEAR)
+                    for tf in target_frames
+                ]
+            all_frames = [ref_frame] + session_targets
 
             session = processor.init_video_session(
                 video=all_frames,
@@ -513,10 +534,28 @@ def segment_fewshot(
                     pm = pred_masks
                     if hasattr(pm, "float"):
                         pm = pm.float()
+                    obj_scores = getattr(out, "object_score_logits", None)
+                    if obj_scores is not None:
+                        obj_scores = obj_scores.reshape(-1)
+
                     # Shape (num_objs, 1, H, W) or (num_objs, H, W) — logits: >0 means mask
                     for i in range(pm.shape[0]):
+                        # object_score_logits is the tracker's own presence head — a
+                        # mask blob can still render even once the object has left
+                        # the frame or is occluded, so this is what actually tells
+                        # "found it" apart from "made something up." Matches the
+                        # model's own is_obj_appearing = object_score_logits > 0.
+                        if obj_scores is not None and i < obj_scores.numel():
+                            logit = float(obj_scores[i].item())
+                            if logit <= 0:
+                                continue
+                            confidence = float(torch.sigmoid(torch.tensor(logit)))
+                            if confidence < threshold:
+                                continue
+                        else:
+                            confidence = 0.75
                         mask = pm[i]
-                        det = _mask_to_detection(mask, confidence=0.75, target_size=target_img.size)
+                        det = _mask_to_detection(mask, confidence=confidence, target_size=target_img.size)
                         if det is not None:
                             results[str(target_path)].append(det)
 
