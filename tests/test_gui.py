@@ -1105,3 +1105,310 @@ def test_gui_fix_in_labeler_button_sends_human_review_images(gui, tmp_path: Path
 
     assert [p.name for p in gui.labeler_panel.image_paths] == ["bad.jpg"]
     assert gui.notebook.select() == str(gui.labeler_tab)
+
+
+# ---------- LabelerPanel: remaining functionality coverage ----------
+
+class _SyncThread:
+    """Runs the target immediately instead of on a background thread, so a
+    test can call root.update() right after to flush the self.after(0, ...)
+    callback the worker schedules -- no sleeps, no races."""
+    def __init__(self, target=None, daemon=None):
+        self._target = target
+
+    def start(self):
+        self._target()
+
+
+def _fake_event(x, y, state=0):
+    class E:
+        pass
+    e = E()
+    e.x, e.y, e.state = x, y, state
+    return e
+
+
+def test_labeler_edit_mode_drag_vertex_moves_polygon_point(labeler, tmp_path: Path) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.mode.set("edit")
+    labeler.shapes = [_Shape("polygon", "box", [(10, 10), (50, 10), (50, 50), (10, 50)])]
+
+    cx, cy = labeler._image_to_canvas(10, 10)
+    labeler._on_click(_fake_event(cx, cy))  # picks the shape (no vertex selected yet)
+    assert labeler._sel_shape_idx == 0
+    labeler._on_click(_fake_event(cx, cy))  # now selects that vertex and starts dragging
+    assert labeler._sel_vertex_idx == 0
+    assert labeler._dragging_vertex is True
+
+    nx, ny = labeler._image_to_canvas(25, 30)
+    labeler._on_drag(_fake_event(nx, ny))
+    assert labeler.shapes[0].points[0] == (25.0, 30.0)
+
+    labeler._on_release(_fake_event(nx, ny))
+    assert labeler._dragging_vertex is False
+    assert labeler.dirty is True
+
+
+def test_labeler_edit_mode_drag_rectangle_corner_keeps_opposite_fixed(labeler, tmp_path: Path) -> None:
+    img = tmp_path / "r.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.mode.set("edit")
+    labeler.shapes = [_Shape("rectangle", "box", [(10, 10), (60, 60)])]
+
+    cx, cy = labeler._image_to_canvas(10, 10)
+    labeler._on_click(_fake_event(cx, cy))  # pick shape
+    labeler._on_click(_fake_event(cx, cy))  # select top-left corner, begin drag
+
+    nx, ny = labeler._image_to_canvas(0, 0)
+    labeler._on_drag(_fake_event(nx, ny))
+    assert labeler.shapes[0].points[0] == (0.0, 0.0)
+    assert labeler.shapes[0].points[1] == (60.0, 60.0), "opposite corner must stay put"
+
+
+def test_labeler_escape_cancels_draft(labeler, tmp_path: Path) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.mode.set("polygon")
+
+    labeler._draft_points = [(10, 10), (20, 20)]
+    labeler._cancel_draft()
+    assert labeler._draft_points == []
+    assert labeler.shapes == []
+
+
+def test_labeler_rectangle_micro_drag_creates_nothing(labeler, tmp_path: Path) -> None:
+    """A near-zero drag (misclick) must not create a degenerate rectangle."""
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.mode.set("rectangle")
+
+    sx, sy = labeler._image_to_canvas(30, 30)
+    labeler._on_click(_fake_event(sx, sy))
+    labeler._on_release(_fake_event(sx + 1, sy + 1))
+    assert labeler.shapes == []
+
+
+def test_labeler_wheel_zoom_in_and_out(labeler, tmp_path: Path) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    start = labeler._zoom
+
+    class WheelUp:
+        delta = 120
+    labeler._on_wheel(WheelUp())
+    assert labeler._zoom > start
+
+    zoomed = labeler._zoom
+    class WheelDown:
+        delta = -120
+    labeler._on_wheel(WheelDown())
+    assert labeler._zoom < zoomed
+
+
+def test_labeler_fit_view_resets_zoom_and_pan(labeler, tmp_path: Path) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+
+    labeler._zoom_by(2.0)
+    labeler._pan = [40, -15]
+    labeler._fit_view()
+    assert labeler._zoom == 1.0
+    assert labeler._pan == [0, 0]
+
+
+def test_labeler_label_list_pick_sets_current_class(labeler) -> None:
+    labeler.classes = ["object", "car", "dog"]
+    labeler._refresh_label_list()
+    labeler.label_list.selection_set(1)
+    labeler._on_label_pick()
+    assert labeler.current_class.get() == "car"
+
+
+def test_labeler_apply_theme_no_crash(labeler, tmp_path: Path) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.apply_theme({
+        "panel": "#222222", "fg": "#eeeeee", "accent": "#4477ff", "preview_bg": "#111111",
+    })
+    assert str(labeler.canvas.cget("bg")) in ("#111111",)
+
+
+def test_labeler_confirm_unsaved_dialog_paths(labeler, tmp_path: Path, monkeypatch) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.autosave_var.set(False)
+    labeler.dirty = True
+
+    monkeypatch.setattr("tkinter.messagebox.askyesnocancel", lambda t, m: None)
+    assert labeler._confirm_unsaved() is False, "Cancel must block navigation"
+    assert not (tmp_path / "p.json").exists()
+
+    monkeypatch.setattr("tkinter.messagebox.askyesnocancel", lambda t, m: False)
+    assert labeler._confirm_unsaved() is True, "No must allow navigation without saving"
+    assert not (tmp_path / "p.json").exists()
+
+    monkeypatch.setattr("tkinter.messagebox.askyesnocancel", lambda t, m: True)
+    assert labeler._confirm_unsaved() is True
+    assert (tmp_path / "p.json").exists(), "Yes must save before navigating"
+
+
+def test_labeler_ctrl_drag_pans_canvas(labeler, tmp_path: Path) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.mode.set("rectangle")
+
+    labeler._on_click(_fake_event(10, 10, state=0x0004))  # Ctrl held
+    assert labeler._dragging_canvas is True
+    labeler._on_drag(_fake_event(25, 40, state=0x0004))
+    assert labeler._pan == [15, 30]
+    assert labeler.shapes == [], "Ctrl-drag must pan, not draw a rectangle"
+
+
+def test_labeler_delete_key_bound(labeler) -> None:
+    binds = " ".join(labeler.canvas.bind())
+    assert "Delete" in binds
+
+
+def test_labeler_populate_files_badges_existing_json(labeler, tmp_path: Path) -> None:
+    a = tmp_path / "a.jpg"; b = tmp_path / "b.jpg"
+    Image.new("RGB", (20, 20)).save(a)
+    Image.new("RGB", (20, 20)).save(b)
+    a.with_suffix(".json").write_text(json.dumps({
+        "version": "5.4.1", "flags": {}, "shapes": [], "imagePath": "a.jpg",
+        "imageData": None, "imageHeight": 20, "imageWidth": 20,
+    }), encoding="utf-8")
+
+    labeler._populate_files(tmp_path)
+    entries = [labeler.file_list.get(i) for i in range(labeler.file_list.size())]
+    assert entries[0].startswith("● ")
+    assert entries[1].startswith("  ")
+    assert labeler.progress_var.get() == "labeled 1/2"
+
+
+def test_labeler_right_click_finishes_polygon_in_draw_mode(labeler, tmp_path: Path, monkeypatch) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.mode.set("polygon")
+    monkeypatch.setattr(labeler, "_prompt_label", lambda default: "blob")
+
+    labeler._draft_points = [(10, 10), (50, 10), (50, 50)]
+    labeler._on_right_click(None)
+    assert len(labeler.shapes) == 1
+    assert labeler.shapes[0].label == "blob"
+
+
+def test_labeler_auto_annotate_adds_shapes_from_sam3(labeler, tmp_path: Path, monkeypatch) -> None:
+    from src.tools.sam3.client import RawMask
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.current_class.set("car")
+
+    monkeypatch.setattr("src.ui.labeler.threading.Thread", _SyncThread)
+    fake = RawMask(polygon=[(1, 1), (5, 1), (5, 5)], bbox=(1, 1, 4, 4), area=16.0, confidence=0.9)
+    monkeypatch.setattr("src.tools.sam3.sam3_segment_text_prompt", lambda **kw: [fake])
+
+    labeler._auto_annotate()
+    labeler.update()
+
+    assert len(labeler.shapes) == 1
+    assert labeler.shapes[0].label == "car"
+    assert labeler.dirty is True
+
+
+def test_labeler_auto_annotate_no_result_leaves_shapes_empty(labeler, tmp_path: Path, monkeypatch) -> None:
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+
+    monkeypatch.setattr("src.ui.labeler.threading.Thread", _SyncThread)
+    monkeypatch.setattr("src.tools.sam3.sam3_segment_text_prompt", lambda **kw: [])
+
+    labeler._auto_annotate()
+    labeler.update()
+
+    assert labeler.shapes == []
+    assert "nothing" in labeler.status_var.get().lower()
+
+
+def test_labeler_sam_box_assist_adds_shape(labeler, tmp_path: Path, monkeypatch) -> None:
+    from src.tools.sam3.client import RawMask
+    img = tmp_path / "p.jpg"
+    Image.new("RGB", (100, 100)).save(img)
+    labeler.image_paths = [img]
+    labeler.current_idx = 0
+    labeler._load_image(img)
+    labeler.current_class.set("car")
+
+    monkeypatch.setattr("src.ui.labeler.threading.Thread", _SyncThread)
+    fake = RawMask(polygon=[], bbox=(5, 5, 20, 20), area=400.0, confidence=0.8)
+    monkeypatch.setattr("src.tools.sam3.sam3_segment_box_prompt", lambda **kw: [fake])
+
+    labeler._run_sam_box(5, 5, 25, 25)
+    labeler.update()
+
+    assert len(labeler.shapes) == 1
+    assert labeler.shapes[0].kind == "rectangle"
+    assert labeler.shapes[0].points == [(5.0, 5.0), (25.0, 25.0)]
+
+
+def test_labeler_sam_box_result_discarded_if_image_changed(labeler, tmp_path: Path, monkeypatch) -> None:
+    """A slow SAM3 call must not paint shapes onto whatever image is open when
+    it finally returns -- the user may have already moved on to the next one."""
+    from src.tools.sam3.client import RawMask
+    img1 = tmp_path / "a.jpg"; img2 = tmp_path / "b.jpg"
+    Image.new("RGB", (100, 100)).save(img1)
+    Image.new("RGB", (100, 100)).save(img2)
+    labeler.image_paths = [img1, img2]
+    labeler.current_idx = 0
+    labeler._load_image(img1)
+
+    monkeypatch.setattr("src.ui.labeler.threading.Thread", _SyncThread)
+    fake = RawMask(polygon=[], bbox=(1, 1, 4, 4), area=16.0, confidence=0.9)
+
+    def _slow_call(**kw):
+        labeler.current_idx = 1
+        labeler._load_image(img2)  # simulate user navigating away mid-request
+        return [fake]
+
+    monkeypatch.setattr("src.tools.sam3.sam3_segment_box_prompt", _slow_call)
+    labeler._run_sam_box(1, 1, 5, 5)
+    labeler.update()
+
+    assert labeler.shapes == [], "result for the old image must not land on the new one"
+    assert "discarded" in labeler.status_var.get().lower()
