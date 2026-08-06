@@ -898,6 +898,11 @@ class AnnotatorGUI:
         self.accept_btn.pack(side="left", padx=(12, 0))
         self.accept_all_btn = ttk.Button(controls, text="✓ Accept All Warnings", command=self._accept_all_warnings, state="disabled")
         self.accept_all_btn.pack(side="left", padx=(6, 0))
+        self.fix_in_labeler_btn = ttk.Button(
+            controls, text="✏ Fix Remaining in Labeler",
+            command=self._send_human_review_to_labeler, state="disabled",
+        )
+        self.fix_in_labeler_btn.pack(side="left", padx=(6, 0))
 
         labels_row = ttk.Frame(right)
         labels_row.pack(fill="both", expand=True)
@@ -1827,10 +1832,28 @@ class AnnotatorGUI:
         has_hr = False
         if self.last_bundles:
             has_hr = any(b.status == "HUMAN_REVIEW" for b in self.last_bundles)
-        if has_hr:
-            self.accept_all_btn.configure(state="normal")
-        else:
-            self.accept_all_btn.configure(state="disabled")
+        state = "normal" if has_hr else "disabled"
+        self.accept_all_btn.configure(state=state)
+        self.fix_in_labeler_btn.configure(state=state)
+
+    def _send_human_review_to_labeler(self) -> None:
+        if not self.last_bundles:
+            return
+        hr_bundles = [b for b in self.last_bundles if b.status == "HUMAN_REVIEW"]
+        if not hr_bundles:
+            messagebox.showinfo("Nothing to fix", "No images with HUMAN_REVIEW status found.")
+            return
+        paths = [b.image.path for b in hr_bundles if b.image.path.exists()]
+        if not paths:
+            messagebox.showwarning(
+                "Images not found",
+                "The HUMAN_REVIEW images could not be located on disk (the source may have moved).",
+            )
+            return
+        self.labeler_panel.load_paths(
+            paths, note=f"Fixing {len(paths)} image(s) that need human review.",
+        )
+        self.notebook.select(self.labeler_tab)
 
     def _accept_all_warnings(self) -> None:
         if not self.last_bundles:
