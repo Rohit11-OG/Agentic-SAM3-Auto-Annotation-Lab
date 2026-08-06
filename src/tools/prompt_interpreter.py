@@ -207,6 +207,21 @@ def interpret_prompt(user_prompt: str, fallback_schema: Optional[List[str]] = No
             class_name = canon if canon else target_token
             base_term = canon if canon else target_token
 
+        # A phrase can name more than one object without a comma/and/or between
+        # them ("big red truck near small blue car" — "near" isn't a splitter).
+        # Only the last non-modifier token becomes class_name above; any other
+        # token that independently resolves to a distinct known class would
+        # otherwise be silently swallowed into class_name's prompt text and
+        # never detected at all. Pull those out as classes of their own.
+        extra_anchors: List[str] = []
+        if not bigram_match:
+            for t in tokens:
+                if t in bigram_tokens or t == target_token:
+                    continue
+                canon_t = _canonical_for(t)
+                if canon_t and canon_t != class_name and canon_t not in extra_anchors:
+                    extra_anchors.append(canon_t)
+
         # Deduplicate
         if class_name in seen:
             continue
@@ -220,11 +235,12 @@ def interpret_prompt(user_prompt: str, fallback_schema: Optional[List[str]] = No
                 continue
             t_canon = _canonical_for(t) or t
             t_clean = re.sub(r"s$", "", t) if len(t) > 3 and t.endswith("s") else t
-            if (t_canon == class_name or 
-                t_clean == class_name or 
-                t == class_name or 
-                (target_token is not None and t == target_token) or 
-                t == base_term):
+            if (t_canon == class_name or
+                t_clean == class_name or
+                t == class_name or
+                (target_token is not None and t == target_token) or
+                t == base_term or
+                t_canon in extra_anchors):
                 continue
             adjectives.append(t)
 
@@ -234,6 +250,14 @@ def interpret_prompt(user_prompt: str, fallback_schema: Optional[List[str]] = No
             prompt_text = base_term
 
         per_class_prompt[class_name] = prompt_text
+
+        for extra in extra_anchors:
+            if extra in seen:
+                continue
+            seen.add(extra)
+            classes.append(extra)
+            per_class_prompt[extra] = extra
+            notes.append(f"'{extra}' was named alongside '{class_name}' in the same phrase; added as its own class.")
 
     if not classes:
         if fallback_schema:
