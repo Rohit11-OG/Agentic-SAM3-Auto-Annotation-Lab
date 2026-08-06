@@ -103,6 +103,8 @@ class LabelerPanel(ttk.Frame):
         self.zoom_var = tk.StringVar(value="100%")
         self.count_var = tk.StringVar(value="shapes: 0")
         self.autosave_var = tk.BooleanVar(value=True)
+        self.skip_labeled_var = tk.BooleanVar(value=False)
+        self.progress_var = tk.StringVar(value="")
         import sys
         self._skip_prompt = "pytest" in sys.modules
 
@@ -164,6 +166,9 @@ class LabelerPanel(ttk.Frame):
         ttk.Button(toolbar, text="🤖 Auto (SAM3)", command=self._auto_annotate).pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Checkbutton(toolbar, text="Auto-save", variable=self.autosave_var).pack(side="left", padx=2)
+        ttk.Checkbutton(
+            toolbar, text="Skip labeled", variable=self.skip_labeled_var,
+        ).pack(side="left", padx=2)
 
         # ===== Body: 3 columns =====
         body = ttk.Frame(self)
@@ -219,6 +224,7 @@ class LabelerPanel(ttk.Frame):
         status = ttk.Frame(self, relief="sunken", padding=(6, 2))
         status.pack(fill="x")
         ttk.Label(status, textvariable=self.status_var, anchor="w").pack(side="left", fill="x", expand=True)
+        ttk.Label(status, textvariable=self.progress_var, width=14, anchor="e").pack(side="right", padx=4)
         ttk.Label(status, textvariable=self.coords_var, width=14, anchor="e").pack(side="right", padx=4)
         ttk.Label(status, textvariable=self.zoom_var, width=8, anchor="e").pack(side="right", padx=4)
         ttk.Label(status, textvariable=self.count_var, width=14, anchor="e").pack(side="right", padx=4)
@@ -336,20 +342,41 @@ class LabelerPanel(ttk.Frame):
         self._populate_files(Path(folder))
 
     def _populate_files(self, folder: Path) -> None:
-        self.image_paths = sorted(
+        paths = sorted(
             p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTS
         )
+        self._set_file_list(paths, empty_message="No images at top level.")
+
+    def load_paths(self, paths: List[Path], note: str = "") -> None:
+        """Load an explicit, pre-filtered list of images instead of scanning a
+        folder — the entry point for "Fix in Labeler" from the Results tab, so
+        the user lands directly on the images that need work instead of
+        hunting for them in a folder that may hold hundreds of others."""
+        self._set_file_list(sorted(paths), empty_message="No images to label.", status_note=note)
+
+    def _set_file_list(
+        self, paths: List[Path], empty_message: str, status_note: Optional[str] = None,
+    ) -> None:
+        self.image_paths = paths
         self.file_list.delete(0, "end")
         for p in self.image_paths:
             has_json = p.with_suffix(".json").exists()
             badge = "● " if has_json else "  "
             self.file_list.insert("end", f"{badge}{p.name}")
+        self._update_progress()
         if self.image_paths:
             self.current_idx = 0
             self.file_list.selection_set(0)
             self._load_image(self.image_paths[0])
+            if status_note:
+                self.status_var.set(status_note)
         else:
-            messagebox.showwarning("Empty folder", "No images at top level.")
+            messagebox.showwarning("No images", empty_message)
+
+    def _update_progress(self) -> None:
+        total = len(self.image_paths)
+        done = sum(1 for p in self.image_paths if p.with_suffix(".json").exists())
+        self.progress_var.set(f"labeled {done}/{total}" if total else "")
 
     def _on_file_select(self, _e=None) -> None:
         sel = self.file_list.curselection()
@@ -368,22 +395,27 @@ class LabelerPanel(ttk.Frame):
         self._load_image(self.image_paths[idx])
 
     def _next_image(self) -> None:
-        if not self.image_paths:
-            return
-        if not self._confirm_unsaved():
-            return
-        self.current_idx = (self.current_idx + 1) % len(self.image_paths)
-        self._sync_file_list_selection()
-        self._load_image(self.image_paths[self.current_idx])
+        self._advance(1)
 
     def _prev_image(self) -> None:
+        self._advance(-1)
+
+    def _advance(self, step: int) -> None:
         if not self.image_paths:
             return
         if not self._confirm_unsaved():
             return
-        self.current_idx = (self.current_idx - 1) % len(self.image_paths)
-        self._sync_file_list_selection()
-        self._load_image(self.image_paths[self.current_idx])
+        n = len(self.image_paths)
+        skip = self.skip_labeled_var.get()
+        idx = self.current_idx
+        for _ in range(n):
+            idx = (idx + step) % n
+            if not skip or not self.image_paths[idx].with_suffix(".json").exists():
+                self.current_idx = idx
+                self._sync_file_list_selection()
+                self._load_image(self.image_paths[idx])
+                return
+        messagebox.showinfo("All done", "Every image in this list is already labeled.")
 
     def _sync_file_list_selection(self) -> None:
         self.file_list.selection_clear(0, "end")
@@ -995,6 +1027,7 @@ class LabelerPanel(ttk.Frame):
                 self.file_list.delete(self.current_idx)
                 self.file_list.insert(self.current_idx, f"● {self.current_image_path.name}")
                 self._sync_file_list_selection()
+            self._update_progress()
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Save failed", str(exc))
 
