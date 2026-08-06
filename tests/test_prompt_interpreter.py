@@ -51,3 +51,21 @@ def test_custom_singularization() -> None:
     plan = interpret_prompt("find widgets and boxes")
     assert "widget" in plan.classes
     assert "box" in plan.classes
+
+
+def test_two_known_classes_in_one_phrase_without_separator() -> None:
+    """"near" isn't a phrase splitter, so both nouns land in one phrase's
+    token list — the second (earlier) known class must not be silently
+    absorbed into the first's prompt text and lost."""
+    plan = interpret_prompt("find the big red truck near the small blue car")
+    assert set(plan.classes) == {"truck", "car"}
+    assert plan.per_class_prompt["truck"] == "truck"
+    assert any("truck" in n and "car" in n for n in plan.notes)
+
+
+def test_unrecognized_second_noun_still_not_rescued() -> None:
+    """The rescue only fires for tokens that resolve to a *known* synonym-table
+    class; a custom domain noun neither side recognizes stays a limitation of
+    the rule-based matcher, not something this fix claims to solve."""
+    plan = interpret_prompt("find scratches near dark spots")
+    assert plan.classes == ["spot"]
