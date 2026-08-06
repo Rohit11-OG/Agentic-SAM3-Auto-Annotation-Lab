@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from src.core.config_loader import load_project_config
 from src.core.logging_utils import setup_logging
-from src.core.orchestrator import list_image_paths, run_orchestrator
+from src.core.orchestrator import EXPORT_SUBDIRS, list_image_paths, run_orchestrator
 from src.tools.video_extractor import VIDEO_SUFFIXES as _VIDEO_EXTS, extract_frames
 
 if TYPE_CHECKING:
@@ -2125,8 +2125,34 @@ class AnnotatorGUI:
             ]
         fallback_class = (self._fs_class_var.get().strip() or "object")
 
+        def _is_export_artifact(p: Path) -> bool:
+            """True for a file under an export subfolder (or inside out_dir).
+
+            The exporters copy every annotated image, and the LabelMe exporter
+            writes a JSON beside it. Without this check, scanning the dataset
+            folder for references would pick the pipeline's own prior output
+            back up — as if it were manually drawn ground truth — and would
+            offer the export copies as extra targets to re-annotate.
+            """
+            try:
+                root = dataset_dir.resolve()
+                rp = p.resolve()
+                if any(part in EXPORT_SUBDIRS for part in rp.relative_to(root).parts[:-1]):
+                    return True
+            except (OSError, ValueError):
+                pass
+            if out_dir is not None and out_dir.resolve() != dataset_dir.resolve():
+                try:
+                    if p.resolve().is_relative_to(out_dir.resolve()):
+                        return True
+                except (OSError, ValueError):
+                    pass
+            return False
+
         # 1. LabelMe JSONs saved by the Labeler (points already in pixels, label per shape)
         for jf in sorted(dataset_dir.rglob("*.json")):
+            if _is_export_artifact(jf):
+                continue
             try:
                 data = json.loads(jf.read_text(encoding="utf-8"))
                 shapes = data.get("shapes") or []
@@ -2179,11 +2205,15 @@ class AnnotatorGUI:
             lines = [line.strip() for line in lf.read_text(encoding="utf-8").splitlines() if line.strip()]
             if not lines:
                 continue
-            # Find image
+            # Find image. Prefer a non-export copy: rglob order isn't guaranteed,
+            # and an export folder can hold an identical-content copy of the
+            # same stem, so picking arbitrarily would be non-deterministic.
             img_path = None
             if dataset_dir.exists():
                 for ext in IMAGE_EXTS:
-                    candidates = list(dataset_dir.rglob(f"{stem}{ext}"))
+                    candidates = [c for c in dataset_dir.rglob(f"{stem}{ext}") if not _is_export_artifact(c)]
+                    if not candidates:
+                        candidates = list(dataset_dir.rglob(f"{stem}{ext}"))
                     if candidates:
                         img_path = candidates[0]
                         break
@@ -2238,12 +2268,11 @@ class AnnotatorGUI:
             )
         self._fs_ref_count_var.set(f"{len(refs)} reference(s) loaded")
 
-        # Scan targets: images NOT in refs
+        # Scan targets: images NOT in refs. list_image_paths already excludes
+        # export subfolders (and out_dir when nested), so exported copies never
+        # come back as extra targets to re-annotate.
         ref_stems = {p.stem for p, _ in refs}
-        all_images = []
-        if dataset_dir.exists():
-            for ext in IMAGE_EXTS:
-                all_images.extend(dataset_dir.rglob(f"*{ext}"))
+        all_images = list_image_paths(dataset_dir, exclude=out_dir) if dataset_dir.exists() else []
         targets = sorted(set(p for p in all_images if p.stem not in ref_stems))
         self._fs_targets = targets
         self._fs_target_listbox.delete(0, "end")
