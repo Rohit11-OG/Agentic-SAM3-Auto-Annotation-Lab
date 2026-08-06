@@ -1759,6 +1759,43 @@ class AnnotatorGUI:
             self.status_var.set(f"Failed to load results: {exc}")
             messagebox.showerror("Error loading results", f"Could not parse log file: {exc}")
 
+    def _sync_output_after_status_change(self) -> bool:
+        """Rewrite every derived output file after a bundle's status changes.
+
+        conversation_logs.json, the YOLO/LabelMe exports, and qa_report.json
+        are all snapshots of self.last_bundles taken at export time; nothing
+        keeps them live. Accepting an image from the Results tab used to
+        update the first two but never qa_report.json, so the Dashboard kept
+        showing the pre-accept HUMAN_REVIEW count and accept_rate forever —
+        this is the one place both Accept and Accept All route through now.
+        Returns False (with an error already shown) if a write failed.
+        """
+        if not self.last_output_path:
+            return True
+        label_schema = self._classes
+        if self.last_config:
+            label_schema = self.last_config.label_schema
+        try:
+            from src.core.orchestrator import _export_conversation_logs, _export_qa_report
+            from src.tools.yolo.exporter import export_yolo
+            from src.tools.labelme import export_labelme
+
+            slim = self.last_config.slim_conversation_logs if self.last_config else True
+            _export_conversation_logs(self.last_bundles, self.last_output_path, slim=slim)
+            export_yolo(
+                self.last_bundles, self.last_output_path,
+                label_schema=label_schema,
+                segmentation=self.last_config.yolo_segmentation if self.last_config else True,
+                force_all=True,
+            )
+            export_labelme(self.last_bundles, self.last_output_path, force_all=True)
+            _export_qa_report(self.last_bundles, self.last_output_path, label_schema)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Error updating outputs", f"Could not save changes: {exc}")
+            return False
+        self._refresh_dashboard()
+        return True
+
     def _accept_selected_annotation(self) -> None:
         sel = self.labels_listbox.curselection()
         if not sel:
@@ -1778,40 +1815,8 @@ class AnnotatorGUI:
         bundle.status = "ACCEPTED"
         self._bundle_status[stem] = "ACCEPTED"
 
-        # Save conversation_logs.json
-        if self.last_output_path:
-            try:
-                from src.core.orchestrator import _export_conversation_logs
-                slim = True
-                if self.last_config:
-                    slim = self.last_config.slim_conversation_logs
-                _export_conversation_logs(self.last_bundles, self.last_output_path, slim=slim)
-            except Exception as exc:
-                messagebox.showerror("Error updating logs", f"Could not save changes to logs: {exc}")
-                return
-
-            # quiet YOLO and LabelMe export to keep output directory in sync
-            try:
-                from src.tools.yolo.exporter import export_yolo
-                from src.tools.labelme import export_labelme
-                label_schema = self._classes
-                if self.last_config:
-                    label_schema = self.last_config.label_schema
-                
-                export_yolo(
-                    self.last_bundles,
-                    self.last_output_path,
-                    label_schema=label_schema,
-                    segmentation=self.last_config.yolo_segmentation if self.last_config else True,
-                    force_all=True,
-                )
-                export_labelme(
-                    self.last_bundles,
-                    self.last_output_path,
-                    force_all=True,
-                )
-            except Exception as exc:
-                messagebox.showwarning("Warning", f"Could not export updated labels to YOLO files: {exc}")
+        if not self._sync_output_after_status_change():
+            return
 
         # Refresh listbox and maintain selection
         self._load_labels_list()
@@ -1875,40 +1880,8 @@ class AnnotatorGUI:
             bundle.status = "ACCEPTED"
             self._bundle_status[bundle.image.path.stem] = "ACCEPTED"
 
-        # Save conversation_logs.json
-        if self.last_output_path:
-            try:
-                from src.core.orchestrator import _export_conversation_logs
-                slim = True
-                if self.last_config:
-                    slim = self.last_config.slim_conversation_logs
-                _export_conversation_logs(self.last_bundles, self.last_output_path, slim=slim)
-            except Exception as exc:
-                messagebox.showerror("Error updating logs", f"Could not save changes to logs: {exc}")
-                return
-
-            # quiet YOLO and LabelMe export to keep output directory in sync
-            try:
-                from src.tools.yolo.exporter import export_yolo
-                from src.tools.labelme import export_labelme
-                label_schema = self._classes
-                if self.last_config:
-                    label_schema = self.last_config.label_schema
-
-                export_yolo(
-                    self.last_bundles,
-                    self.last_output_path,
-                    label_schema=label_schema,
-                    segmentation=self.last_config.yolo_segmentation if self.last_config else True,
-                    force_all=True,
-                )
-                export_labelme(
-                    self.last_bundles,
-                    self.last_output_path,
-                    force_all=True,
-                )
-            except Exception as exc:
-                messagebox.showwarning("Warning", f"Could not export updated labels to YOLO files: {exc}")
+        if not self._sync_output_after_status_change():
+            return
 
         # Refresh listbox and maintain selection
         self._load_labels_list()
