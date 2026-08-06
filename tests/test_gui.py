@@ -56,6 +56,22 @@ def test_color_for_consistent() -> None:
     assert isinstance(color_for("anything"), str)
 
 
+def test_color_for_stable_across_process_hash_seeds() -> None:
+    """color_for must not depend on Python's randomized hash() -- a class's
+    color would otherwise shift on every restart of the app."""
+    import os, subprocess, sys
+    outputs = set()
+    for seed in ("0", "1", "12345"):
+        env = {**os.environ, "PYTHONHASHSEED": seed}
+        result = subprocess.run(
+            [sys.executable, "-c", "from src.ui._helpers import color_for; print(color_for('car'))"],
+            cwd=str(Path(__file__).resolve().parents[1]),
+            capture_output=True, text=True, env=env,
+        )
+        outputs.add(result.stdout.strip())
+    assert len(outputs) == 1, f"color_for('car') varied across hash seeds: {outputs}"
+
+
 def test_attach_tooltip_no_crash(root) -> None:
     btn = tk.Button(root, text="hi")
     attach_tooltip(btn, "tip")
@@ -583,6 +599,45 @@ def test_load_and_accept_all_warnings_flow(gui, tmp_path: Path, monkeypatch) -> 
     assert lm_data["shapes"][0]["label"] == "box"
     assert lm_data["shapes"][0]["shape_type"] == "polygon"
     assert lm_data["imagePath"] == "test_frame.jpg"
+
+
+def test_accept_all_refreshes_qa_report_and_dashboard(gui, tmp_path: Path, monkeypatch) -> None:
+    """Accepting HUMAN_REVIEW images must not leave qa_report.json -- and
+    therefore the Dashboard tab -- showing the pre-accept counts forever."""
+    from src.core.models import AnnotationBundle, ImageRecord, MaskRecord
+
+    dataset_dir = tmp_path / "dataset"
+    dataset_dir.mkdir()
+    out_dir = tmp_path / "output"
+    out_dir.mkdir()
+    img = dataset_dir / "a.jpg"
+    Image.new("RGB", (50, 50)).save(img)
+
+    (out_dir / "qa_report.json").write_text(json.dumps({
+        "total_images": 1, "status_counts": {"HUMAN_REVIEW": 1}, "accept_rate": 0.0,
+        "retries_total": 1, "accepted_after_retry": 0, "human_review_image_ids": ["img_00000"],
+        "per_class_mask_counts": {"car": 0}, "avg_mask_confidence": 0.0, "top_issues": [],
+    }), encoding="utf-8")
+
+    gui.dataset_path.set(str(dataset_dir))
+    gui.output_path.set(str(out_dir))
+    gui.last_output_path = out_dir
+    rec = ImageRecord(id="img_00000", path=img, width=50, height=50)
+    mask = MaskRecord(mask_id="m1", image_id="img_00000", class_id="car", bbox=(1, 1, 5, 5), area=25, confidence=0.9)
+    gui.last_bundles = [AnnotationBundle(image=rec, masks=[mask], status="HUMAN_REVIEW")]
+    gui._bundle_status = {"a": "HUMAN_REVIEW"}
+
+    gui._refresh_dashboard()
+    assert gui.dash_card_vars["human_review"].get() == "1"
+
+    monkeypatch.setattr("tkinter.messagebox.askyesno", lambda *a, **k: True)
+    monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *a, **k: None)
+    gui._accept_all_warnings()
+
+    assert gui.dash_card_vars["human_review"].get() == "0", "Dashboard must refresh, not stay stale"
+    assert gui.dash_card_vars["accept_rate"].get() == "100%"
+    on_disk = json.loads((out_dir / "qa_report.json").read_text())
+    assert on_disk["status_counts"] == {"ACCEPTED": 1}
 
 
 def test_load_results_fallback_yolo_segmentation_detection(gui, tmp_path: Path, monkeypatch) -> None:
