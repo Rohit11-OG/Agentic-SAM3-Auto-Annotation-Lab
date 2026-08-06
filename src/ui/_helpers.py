@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -38,7 +39,11 @@ def resolve_path(p: Path) -> Path:
 
 
 def color_for(class_name: str) -> str:
-    return PALETTE[hash(class_name) % len(PALETTE)]
+    # Python's builtin hash() is randomized per process (PYTHONHASHSEED), so a
+    # class's color would shift on every restart. Use a stable hash instead —
+    # the same class must render the same color across sessions.
+    digest = hashlib.md5(class_name.encode("utf-8")).digest()
+    return PALETTE[int.from_bytes(digest[:4], "big") % len(PALETTE)]
 
 
 def load_json(path: Path) -> dict | list:
