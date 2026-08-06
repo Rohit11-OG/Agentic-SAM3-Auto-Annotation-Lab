@@ -964,3 +964,55 @@ def test_labeler_label_prompt_dialog(labeler, tmp_path: Path, monkeypatch) -> No
     assert len(labeler.shapes) == 1
     assert labeler.shapes[0].label == "custom_label"
     assert "custom_label" in labeler.classes
+
+
+def test_fewshot_scan_ignores_output_dir_pollution(gui, tmp_path: Path) -> None:
+    """Scanning refs/targets must not re-ingest the pipeline's own prior output.
+
+    Reproduces the layout a real run leaves when output_path sits inside (or
+    equals) dataset_path: the exporters copy every annotated image next to its
+    label, and the LabelMe exporter writes a JSON beside that copy. Without
+    filtering, a target scan would offer those copies as extra images to
+    annotate, and a ref scan would pick the pipeline's own predictions back up
+    as if a human had drawn them in the Labeler.
+    """
+    dataset_dir = tmp_path / "cars"
+    dataset_dir.mkdir()
+    for name in ("a.jpg", "b.jpg", "c.jpg"):
+        Image.new("RGB", (40, 40)).save(dataset_dir / name)
+
+    # A genuine Labeler-authored reference directly in the dataset root.
+    (dataset_dir / "c.json").write_text(json.dumps({
+        "version": "5.4.1", "flags": {}, "imagePath": "c.jpg",
+        "imageHeight": 40, "imageWidth": 40,
+        "shapes": [{
+            "label": "car", "points": [[1.0, 1.0], [2.0, 1.0], [2.0, 2.0]],
+            "group_id": None, "shape_type": "polygon", "flags": {},
+        }],
+    }), encoding="utf-8")
+
+    # Simulate a prior pipeline run with output_path == dataset_path: the
+    # exporters copy 'a' next to a JSON of their own, unrelated to the human's.
+    export_dir = dataset_dir / "labelme_json"
+    export_dir.mkdir()
+    Image.new("RGB", (40, 40)).save(export_dir / "a.jpg")
+    (export_dir / "a.json").write_text(json.dumps({
+        "version": "5.4.1", "flags": {}, "imagePath": "a.jpg",
+        "imageHeight": 40, "imageWidth": 40,
+        "shapes": [{
+            "label": "car", "points": [[1.0, 1.0], [2.0, 1.0], [2.0, 2.0]],
+            "group_id": None, "shape_type": "polygon", "flags": {},
+        }],
+    }), encoding="utf-8")
+
+    gui.dataset_path.set(str(dataset_dir))
+    gui.output_path.set(str(dataset_dir))
+    gui._fs_class_var.set("object")
+
+    gui._fewshot_scan_refs()
+
+    ref_names = {p.name for p, _ in gui._fs_refs}
+    assert ref_names == {"c.jpg"}, f"pipeline's own export leaked into refs: {ref_names}"
+
+    target_names = sorted(p.name for p in gui._fs_targets)
+    assert target_names == ["a.jpg", "b.jpg"], f"export copy leaked into targets: {target_names}"
