@@ -1016,3 +1016,92 @@ def test_fewshot_scan_ignores_output_dir_pollution(gui, tmp_path: Path) -> None:
 
     target_names = sorted(p.name for p in gui._fs_targets)
     assert target_names == ["a.jpg", "b.jpg"], f"export copy leaked into targets: {target_names}"
+
+
+def test_labeler_load_paths_bridges_prefiltered_list(labeler, tmp_path: Path) -> None:
+    """load_paths must show exactly the given images, in name order, with a note."""
+    a = tmp_path / "a.jpg"; b = tmp_path / "b.jpg"; c = tmp_path / "c.jpg"
+    for p in (a, b, c):
+        Image.new("RGB", (20, 20)).save(p)
+
+    labeler.load_paths([c, a], note="Fixing 2 image(s) that need human review.")
+
+    assert [p.name for p in labeler.image_paths] == ["a.jpg", "c.jpg"]
+    assert "b.jpg" not in [p.name for p in labeler.image_paths]
+    assert labeler.current_image_path == a
+    assert labeler.status_var.get() == "Fixing 2 image(s) that need human review."
+    assert labeler.progress_var.get() == "labeled 0/2"
+
+
+def test_labeler_skip_labeled_navigation(labeler, tmp_path: Path) -> None:
+    """With Skip labeled on, Next must jump over already-annotated images."""
+    a = tmp_path / "a.jpg"; b = tmp_path / "b.jpg"; c = tmp_path / "c.jpg"
+    for p in (a, b, c):
+        Image.new("RGB", (20, 20)).save(p)
+    # b already has a saved annotation; a and c do not
+    b.with_suffix(".json").write_text(json.dumps({
+        "version": "5.4.1", "flags": {}, "shapes": [], "imagePath": "b.jpg",
+        "imageData": None, "imageHeight": 20, "imageWidth": 20,
+    }), encoding="utf-8")
+
+    labeler.load_paths([a, b, c])
+    assert labeler.progress_var.get() == "labeled 1/3"
+    assert labeler.current_image_path == a
+
+    labeler.skip_labeled_var.set(True)
+    labeler._next_image()
+    assert labeler.current_image_path == c, "should skip already-labeled b.jpg"
+
+    labeler._next_image()
+    assert labeler.current_image_path == a, "wraps back to the only other unlabeled image"
+
+
+def test_labeler_next_image_updates_progress_after_save(labeler, tmp_path: Path) -> None:
+    a = tmp_path / "a.jpg"; b = tmp_path / "b.jpg"
+    for p in (a, b):
+        Image.new("RGB", (20, 20)).save(p)
+
+    labeler.load_paths([a, b])
+    labeler.mode.set("rectangle")
+    sx, sy = labeler._image_to_canvas(2, 2)
+    ex, ey = labeler._image_to_canvas(10, 10)
+
+    class FakeEvent:
+        def __init__(self, x, y):
+            self.x, self.y, self.state = x, y, 0
+
+    labeler._on_click(FakeEvent(sx, sy))
+    labeler._on_release(FakeEvent(ex, ey))
+    assert labeler.dirty is True
+
+    labeler._save_json()
+    assert labeler.progress_var.get() == "labeled 1/2"
+
+
+def test_gui_fix_in_labeler_button_sends_human_review_images(gui, tmp_path: Path, monkeypatch) -> None:
+    from src.core.models import AnnotationBundle, ImageRecord
+
+    dataset_dir = tmp_path / "dataset"
+    dataset_dir.mkdir()
+    ok_img = dataset_dir / "ok.jpg"
+    bad_img = dataset_dir / "bad.jpg"
+    for p in (ok_img, bad_img):
+        Image.new("RGB", (20, 20)).save(p)
+
+    gui.last_bundles = [
+        AnnotationBundle(
+            image=ImageRecord(id="i0", path=ok_img, width=20, height=20),
+            status="ACCEPTED",
+        ),
+        AnnotationBundle(
+            image=ImageRecord(id="i1", path=bad_img, width=20, height=20),
+            status="HUMAN_REVIEW",
+        ),
+    ]
+    gui._update_accept_all_btn_state()
+    assert str(gui.fix_in_labeler_btn["state"]) == "normal"
+
+    gui._send_human_review_to_labeler()
+
+    assert [p.name for p in gui.labeler_panel.image_paths] == ["bad.jpg"]
+    assert gui.notebook.select() == str(gui.labeler_tab)
